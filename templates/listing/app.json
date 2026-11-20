@@ -1,0 +1,37 @@
+{
+  "title": "Sample App",
+  "summary": "One line for the app list: what it does and for whom.",
+  "description": "Two or three short paragraphs: the problem, what the application does about it, and who uses it.\n\nMarkdown is allowed. Write for a customer's IT admin who decides whether to install it.",
+  "features": [
+    "First thing a user can do",
+    "Second thing a user can do",
+    "Integration or admin feature"
+  ],
+  "screenshots": [
+    { "file": "media/screenshot-1.svg", "caption": "Main screen after sign-in" }
+  ],
+  "architecture": {
+    "description": "Users reach the web app over HTTPS. It runs as a container app in a new Container Apps environment and writes logs to a Log Analytics workspace. The image is pulled with the registry token you enter in the form. Nothing leaves your subscription except the image pull.",
+    "resources": [
+      { "name": "Container Apps environment", "type": "Microsoft.App/managedEnvironments", "purpose": "Hosts the application containers", "sku": "Consumption" },
+      { "name": "Web app", "type": "Microsoft.App/containerApps", "purpose": "Serves the user interface and API", "sku": "0.5 vCPU, 1 GiB, scales to zero" },
+      { "name": "Log Analytics workspace", "type": "Microsoft.OperationalInsights/workspaces", "purpose": "Application and platform logs", "sku": "Pay-as-you-go, 30 days" },
+      { "name": "Managed identity", "type": "Microsoft.ManagedIdentity/userAssignedIdentities", "purpose": "Identity of the app for Azure resources" }
+    ]
+  },
+  "requirements": [
+    "Contributor on the target resource group",
+    "Azure Container Apps available in the selected region",
+    "Registry token from LinkCode (sent with the trial or licence)"
+  ],
+  "cost": "Idle: close to zero, the app scales to zero. Typical use: a few EUR per month for Container Apps and Log Analytics at Azure list prices. Check the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) for your region.",
+  "security": "- Data stays in your subscription and the region you choose.\n- The app uses a managed identity; no secrets are stored in the template.\n- Ingress is HTTPS only; restrict it with the \"Allowed IP ranges\" parameter if needed.",
+  "afterDeployment": [
+    "Open the `appUrl` output in a browser.",
+    "Sign in with the admin account you entered in the form."
+  ],
+  "support": {
+    "homepage": "https://linkcode.pl",
+    "contact": "https://linkcode.pl"
+  }
+}

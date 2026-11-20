@@ -79,3 +79,29 @@ export function deployUrl(dir) {
 }
 
 export const BUTTON_IMAGE = "https://aka.ms/deploytoazurebutton";
+
+// ---- App page standard (docs/app-page-standard.md) ----
+
+export const LISTING_FILES = ["app.json", "architecture.mmd"];
+export const MEDIA_DIR = "media";
+export const MEDIA_EXT = /\.(png|jpe?g|svg|gif|webp)$/i;
+export const MEDIA_MAX_BYTES = 1024 * 1024;
+export const VERSION_OPTIONAL_FILES = ["release-notes.md"];
+
+// Diagram types GitHub renders; flowchart is the recommended one.
+export const MERMAID_TYPES = /^(flowchart|graph|architecture-beta|C4Context|C4Container|C4Component|C4Deployment|sequenceDiagram|block-beta)\b/;
+
+/** First diagram line of a Mermaid file, skipping blank lines, %% comments and --- front matter. */
+export function mermaidHeader(text) {
+  const lines = text.split(/\r?\n/);
+  let i = 0;
+  if (lines[0]?.trim() === "---") {
+    i = lines.indexOf("---", 1) + 1;
+    if (i === 0) return "";
+  }
+  for (; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l && !l.startsWith("%%")) return l;
+  }
+  return "";
+}

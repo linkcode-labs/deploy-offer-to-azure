@@ -6,7 +6,19 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { APP_NAME, APPS_DIR, PACKAGE_FILES, SEMVER, listDirs } from "./lib.mjs";
+import {
+  APP_NAME,
+  APPS_DIR,
+  MEDIA_DIR,
+  MEDIA_EXT,
+  MEDIA_MAX_BYTES,
+  MERMAID_TYPES,
+  PACKAGE_FILES,
+  SEMVER,
+  VERSION_OPTIONAL_FILES,
+  listDirs,
+  mermaidHeader,
+} from "./lib.mjs";
 
 const errors = [];
 const fail = (path, msg) => errors.push(`${path}: ${msg}`);
@@ -41,6 +53,10 @@ function checkTemplate(path) {
         !(typeof p.defaultValue === "object" && Object.keys(p.defaultValue).length === 0)) {
       fail(path, `secure parameter "${name}" has a default value`);
     }
+    if (!p.metadata?.description) fail(path, `parameter "${name}" has no metadata.description (@description in Bicep)`);
+  }
+  for (const [name, o] of Object.entries(t.outputs ?? {})) {
+    if (!o.metadata?.description) fail(path, `output "${name}" has no metadata.description (@description in Bicep)`);
   }
 }
 
@@ -52,25 +68,72 @@ function checkUi(path) {
   if (!ui.parameters?.outputs) fail(path, "parameters.outputs is missing");
 }
 
-function checkPackageDir(dir) {
+function checkPackageDir(dir, optional = []) {
   const files = readdirSync(dir).sort();
-  for (const f of files) if (!PACKAGE_FILES.includes(f)) fail(join(dir, f), "unexpected file (only azuredeploy.json and createUiDefinition.json)");
+  for (const f of files)
+    if (!PACKAGE_FILES.includes(f) && !optional.includes(f))
+      fail(join(dir, f), `unexpected file (allowed: ${[...PACKAGE_FILES, ...optional].join(", ")})`);
   for (const f of PACKAGE_FILES) if (!files.includes(f)) fail(dir, `missing ${f}`);
   if (files.includes("azuredeploy.json")) checkTemplate(join(dir, "azuredeploy.json"));
   if (files.includes("createUiDefinition.json")) checkUi(join(dir, "createUiDefinition.json"));
 }
 
-function checkMeta(path) {
+const str = (v) => typeof v === "string" && v.trim().length > 0;
+const strList = (v) => Array.isArray(v) && v.length > 0 && v.every(str);
+
+function checkMeta(appDir) {
+  const path = join(appDir, "app.json");
   const m = parse(path);
   if (!m) return;
-  if (typeof m.title !== "string" || !m.title.trim()) fail(path, '"title" is required');
-  if (typeof m.description !== "string" || !m.description.trim()) fail(path, '"description" is required');
-  if (m.requirements !== undefined && !(Array.isArray(m.requirements) && m.requirements.every((r) => typeof r === "string")))
-    fail(path, '"requirements" must be a list of strings');
-  for (const k of ["homepage", "marketplaceUrl"])
-    if (m[k] !== undefined && !/^https:\/\//.test(m[k])) fail(path, `"${k}" must be an https URL`);
-  const known = new Set(["title", "description", "requirements", "homepage", "marketplaceUrl"]);
-  for (const k of Object.keys(m)) if (!known.has(k)) fail(path, `unknown key "${k}"`);
+  const req = (key, ok, what) => {
+    if (!ok(m[key])) fail(path, `"${key}" ${what}`);
+  };
+  req("title", str, "is required");
+  req("summary", (v) => str(v) && v.length <= 160 && !v.includes("\n"), "is required: one line, up to 160 characters");
+  req("description", str, "is required");
+  req("features", strList, "is required: a non-empty list of strings");
+  req("requirements", strList, "is required: a non-empty list of strings");
+  req("cost", str, "is required");
+  req("security", str, "is required");
+
+  const a = m.architecture;
+  if (!a || !str(a.description)) fail(path, '"architecture.description" is required');
+  if (!Array.isArray(a?.resources) || !a.resources.length) fail(path, '"architecture.resources" is required: a non-empty list');
+  for (const [i, r] of (a?.resources ?? []).entries()) {
+    if (!str(r.name) || !str(r.purpose)) fail(path, `architecture.resources[${i}] needs "name" and "purpose"`);
+    if (!/^Microsoft\.[A-Za-z]+\/[A-Za-z/]+$/.test(r.type ?? "")) fail(path, `architecture.resources[${i}].type must be an Azure resource type like Microsoft.App/containerApps`);
+    for (const k of Object.keys(r)) if (!["name", "type", "purpose", "sku"].includes(k)) fail(path, `architecture.resources[${i}]: unknown key "${k}"`);
+  }
+  for (const k of Object.keys(a ?? {})) if (!["description", "resources"].includes(k)) fail(path, `architecture: unknown key "${k}"`);
+
+  if (m.afterDeployment !== undefined && !strList(m.afterDeployment)) fail(path, '"afterDeployment" must be a list of strings');
+  for (const [i, sh] of (m.screenshots ?? []).entries()) {
+    if (!str(sh.caption)) fail(path, `screenshots[${i}].caption is required`);
+    if (!new RegExp(`^${MEDIA_DIR}/[\\w.-]+$`).test(sh.file ?? "") || !existsSync(join(appDir, sh.file ?? "")))
+      fail(path, `screenshots[${i}].file must be an existing file in ${MEDIA_DIR}/`);
+  }
+  const support = m.support ?? {};
+  for (const k of Object.keys(support)) {
+    if (!["homepage", "docs", "marketplaceUrl", "contact"].includes(k)) fail(path, `support: unknown key "${k}"`);
+    else if (k === "contact" ? !/^(https:\/\/|mailto:)/.test(support[k]) : !/^https:\/\//.test(support[k]))
+      fail(path, `support.${k} must be an https URL${k === "contact" ? " or mailto:" : ""}`);
+  }
+  const known = ["title", "summary", "description", "features", "screenshots", "architecture", "requirements", "cost", "security", "afterDeployment", "support"];
+  for (const k of Object.keys(m)) if (!known.includes(k)) fail(path, `unknown key "${k}" (see docs/app-page-standard.md)`);
+}
+
+function checkDiagram(path) {
+  const text = readFileSync(path, "utf8");
+  if (!MERMAID_TYPES.test(mermaidHeader(text))) fail(path, "must be a Mermaid diagram starting with flowchart (recommended), graph, architecture-beta or C4*");
+  if (text.includes("```")) fail(path, "write the Mermaid source only, without ``` fences");
+}
+
+function checkMedia(dir) {
+  for (const f of readdirSync(dir)) {
+    const p = join(dir, f);
+    if (statSync(p).isDirectory() || !MEDIA_EXT.test(f)) fail(p, "media/ holds only png, jpg, svg, gif or webp files");
+    else if (statSync(p).size > MEDIA_MAX_BYTES) fail(p, "larger than 1 MB");
+  }
 }
 
 if (existsSync(APPS_DIR)) {
@@ -82,13 +145,17 @@ if (existsSync(APPS_DIR)) {
     }
     if (!APP_NAME.test(entry)) fail(path, "app folder must be lowercase letters, digits and hyphens");
     if (!existsSync(join(path, "app.json"))) fail(path, "missing app.json");
-    else checkMeta(join(path, "app.json"));
+    else checkMeta(path);
+    if (!existsSync(join(path, "architecture.mmd"))) fail(path, "missing architecture.mmd");
+    else checkDiagram(join(path, "architecture.mmd"));
     for (const f of readdirSync(path)) {
       const p = join(path, f);
       if (statSync(p).isDirectory()) {
-        if (f === "latest" || SEMVER.test(f)) checkPackageDir(p);
-        else fail(p, 'folder must be a version (1.2.3, no "v") or latest');
-      } else if (f !== "app.json" && f !== "README.md") {
+        if (f === "latest") checkPackageDir(p);
+        else if (SEMVER.test(f)) checkPackageDir(p, VERSION_OPTIONAL_FILES);
+        else if (f === MEDIA_DIR) checkMedia(p);
+        else fail(p, `folder must be a version (1.2.3, no "v"), latest or ${MEDIA_DIR}`);
+      } else if (!["app.json", "architecture.mmd", "README.md"].includes(f)) {
         fail(p, "unexpected file");
       }
     }

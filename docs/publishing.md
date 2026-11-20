@@ -8,9 +8,9 @@ com-<app> release (tag vX.Y.Z)
   bicep build deploy/azure/main.bicep -> azuredeploy.json
   customer package test (test subscription)          <- must pass before publishing
   publish job (GitHub App token, this repo only)
-    apps/<app>/X.Y.Z/{azuredeploy.json,createUiDefinition.json}
-    apps/<app>/app.json   (copied from deploy/azure/app.json)
-    node scripts/generate.mjs   -> latest/, app README, main README
+    apps/<app>/X.Y.Z/{azuredeploy.json,createUiDefinition.json,release-notes.md}
+    apps/<app>/{app.json,architecture.mmd,media/}   (copied from deploy/azure/listing/)
+    node scripts/generate.mjs   -> latest/, app page, main README
     PR "Publish <app> X.Y.Z" + auto-merge
 deploy-offer-to-azure
   validate.yml: self-test, validate.mjs (structure, schemas, secrets, immutable versions), generate.mjs --check
@@ -20,10 +20,14 @@ deploy-offer-to-azure
 
 ```text
 README.md                         list of apps with buttons (section between apps:start/apps:end is generated)
-apps/<app>/app.json               listing: title, description, requirements, links (written by the app repo)
-apps/<app>/README.md              generated app page with buttons for latest and every version
+apps/<app>/app.json               listing texts and resources (docs/app-page-standard.md), from the app repo
+apps/<app>/architecture.mmd       Mermaid architecture diagram, from the app repo
+apps/<app>/media/                 optional screenshots, from the app repo
+apps/<app>/README.md              generated app page in the standard layout
 apps/<app>/latest/                generated copy of the newest stable version (newest prerelease if none)
-apps/<app>/<x.y.z>/               azuredeploy.json, createUiDefinition.json; immutable once merged
+apps/<app>/<x.y.z>/               azuredeploy.json, createUiDefinition.json, optional release-notes.md;
+                                  immutable once merged
+templates/listing/                starting point for deploy/azure/listing/ in an app repo
 scripts/                          generate.mjs, validate.mjs, selftest.sh (Node 20+, no dependencies)
 ```
 
@@ -31,29 +35,19 @@ scripts/                          generate.mjs, validate.mjs, selftest.sh (Node 
 `v` (tag `v1.2.0` -> `1.2.0`); prereleases (`1.3.0-rc.1`) are listed as previews and never become `latest` while a
 stable version exists.
 
-## `app.json`
+## App page
 
-Kept in the app repository as `deploy/azure/app.json` and copied on every release.
-
-```json
-{
-  "title": "RAG Chat",
-  "description": "Chat with your documents. First paragraph is shown in the main list.",
-  "requirements": [
-    "Azure OpenAI deployment of gpt-4o or an existing compatible endpoint",
-    "Azure Container Apps available in the selected region"
-  ],
-  "homepage": "https://linkcode.pl/rag-chat",
-  "marketplaceUrl": "https://marketplace.microsoft.com/..."
-}
-```
-
-Only `title` and `description` are required; unknown keys are rejected.
+Every app page has the same sections; the content and the rules are in
+[app-page-standard.md](app-page-standard.md). The app repository keeps it in `deploy/azure/listing/` and the publish
+job copies it on every release, so texts and the diagram can change with any new version.
 
 ## Rules enforced by `validate`
 
-- Only `app.json`, `README.md`, `latest/` and version folders inside an app; only the two package files inside a
-  version.
+- Only `app.json`, `architecture.mmd`, `README.md`, `media/`, `latest/` and version folders inside an app; only the
+  two package files (and `release-notes.md`) inside a version.
+- `app.json` has every required section of the [app page standard](app-page-standard.md); `architecture.mmd` is a
+  Mermaid diagram; screenshots exist and are at most 1 MB.
+- Every template parameter and output has `metadata.description`.
 - `azuredeploy.json` has the ARM deployment template schema; `createUiDefinition.json` has the CreateUIDefinition
   schema, handler and `parameters.outputs`.
 - `securestring`/`secureObject` parameters have no default value; no private keys, storage keys, SAS or GitHub/Slack
@@ -99,7 +93,7 @@ TODO: move to `com-offer-shared` as the reusable workflow `publish-deploy-button
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      contents: read
+      contents: read                   # also lets GITHUB_TOKEN read this repo's release notes
     env:
       APP: rag-chat   # repository name without "com-"
     steps:
@@ -129,6 +123,7 @@ TODO: move to `com-offer-shared` as the reusable workflow `publish-deploy-button
         working-directory: offer
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
+          APP_TOKEN: ${{ github.token }}
           BOT: ${{ steps.token.outputs.app-slug }}[bot]
         run: |
           set -euo pipefail
@@ -137,7 +132,12 @@ TODO: move to `com-offer-shared` as the reusable workflow `publish-deploy-button
           if [ -e "$dir" ]; then echo "::error::$dir is already published"; exit 1; fi
           mkdir -p "$dir"
           cp ../package/azuredeploy.json ../package/createUiDefinition.json "$dir/"
-          cp ../app/deploy/azure/app.json "apps/$APP/app.json"
+          GH_TOKEN="$APP_TOKEN" gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body \
+            > "$dir/release-notes.md" || true
+          [ -s "$dir/release-notes.md" ] || rm -f "$dir/release-notes.md"
+          # Listing: replace, so files removed in the app repo disappear here too.
+          rm -rf "apps/$APP/media"
+          cp -r ../app/deploy/azure/listing/. "apps/$APP/"
           node scripts/generate.mjs
           node scripts/validate.mjs
 
@@ -157,7 +157,8 @@ The PR body must not name the private repository or link to it: everything here 
 
 ## By hand
 
-For a first test or an app without CI yet: create the version folder and `app.json` as above, run
+For a first test or an app without CI yet: copy `templates/listing/` to `apps/<app>/`, fill it in, add the version
+folder, run
 `node scripts/generate.mjs && node scripts/validate.mjs`, and open a PR.
 
 ## Testing a button before release
