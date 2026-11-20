@@ -1,0 +1,18 @@
+%% Architecture of Sample App as deployed into the customer's subscription.
+%% Keep it to what the template creates, plus the external things it talks to.
+flowchart LR
+  user([User]) -->|HTTPS| app
+
+  subgraph rg["Resource group (your subscription)"]
+    subgraph env["Container Apps environment"]
+      app["Web app<br/>container app"]
+    end
+    id["Managed identity"]
+    logs[("Log Analytics")]
+  end
+
+  acr[["LinkCode registry"]]
+
+  app -.uses.-> id
+  env -->|logs| logs
+  acr -->|image pull with token| app
