@@ -1,0 +1,47 @@
+{
+  "title": "Global Profile Page",
+  "summary": "Self-service account page for users of Azure AD B2C or Entra External ID: profile, password, sign-in methods and activity.",
+  "description": "Customer identity tenants in Azure AD B2C and Entra External ID give users a sign-in page, but no place to look after their own account afterwards. Every change of a phone number, a password or a profile photo ends up as a help desk ticket or as custom code in each application.\n\nGlobal Profile Page is a ready \"My Account\" page for those users. After signing in with your existing user flow they edit their profile and photo, change the password, add and verify e-mail and phone sign-in methods with one-time codes, link a Google account and review recent sign-in activity. Changes are written straight to your tenant through Microsoft Graph.\n\nIt is meant for organisations that run a B2C or External ID tenant for customers, partners or members and want to give them self-service without building it themselves.",
+  "features": [
+    "View and edit profile details stored in the identity provider tenant",
+    "Upload, replace and remove a profile photo",
+    "Change the password (Azure AD B2C and Entra External ID)",
+    "Add, verify and remove e-mail and phone sign-in methods with one-time codes sent by e-mail or SMS",
+    "Link and unlink a Google account for sign-in",
+    "Review recent sign-in activity",
+    "Optional step-up authentication before sensitive changes",
+    "Works with Azure AD B2C (user flows or custom policies) and Entra External ID"
+  ],
+  "architecture": {
+    "description": "Users open the app over HTTPS and sign in with OpenID Connect against your Azure AD B2C or Entra External ID tenant. The app is one container in a new Container Apps environment: it serves the web interface and its API, keeps the session in an encrypted cookie and holds the tokens on the server.\n\nProfile changes, sign-in methods and sign-in activity are read and written in your identity provider tenant through Microsoft Graph, with an app registration you create. Profile photos and the keys that protect sign-in cookies are stored in a Storage account. Verification codes are sent by e-mail and SMS through Azure Communication Services (e-mail from an Azure managed domain). With Redis on, verification codes and token caches live in Azure Managed Redis so the app can run more than one replica; with Redis off the app runs as one replica with in-memory caches.\n\nThe app reaches Key Vault, Storage and Communication Services with its managed identity; client secrets and the registry token are kept in Key Vault. Logs go to a Log Analytics workspace. Outside the resource group the app talks only to your identity provider tenant, to Google when account linking is on, and to the LinkCode registry to pull its image.",
+    "resources": [
+      { "name": "Container Apps environment", "type": "Microsoft.App/managedEnvironments", "purpose": "Hosts the application container", "sku": "Consumption" },
+      { "name": "Global Profile Page", "type": "Microsoft.App/containerApps", "purpose": "Web interface, sign-in and API in one container", "sku": "0.5 vCPU, 1 GiB, 0-30 replicas (1 without Redis)" },
+      { "name": "Managed identity", "type": "Microsoft.ManagedIdentity/userAssignedIdentities", "purpose": "Identity of the app for Key Vault, Storage and Communication Services" },
+      { "name": "Key Vault", "type": "Microsoft.KeyVault/vaults", "purpose": "Client secrets, registry token and the Redis connection string", "sku": "Standard, RBAC, purge protection" },
+      { "name": "Storage account", "type": "Microsoft.Storage/storageAccounts", "purpose": "Profile photos and sign-in cookie protection keys", "sku": "Standard ZRS, no shared keys" },
+      { "name": "Communication Services", "type": "Microsoft.Communication/communicationServices", "purpose": "Sends verification codes by e-mail and SMS" },
+      { "name": "Email Communication Service and Azure managed domain", "type": "Microsoft.Communication/emailServices", "purpose": "Sender domain of verification e-mails" },
+      { "name": "Azure Managed Redis (optional)", "type": "Microsoft.Cache/redisEnterprise", "purpose": "Verification codes and token caches shared by replicas", "sku": "Balanced B0" },
+      { "name": "Log Analytics workspace", "type": "Microsoft.OperationalInsights/workspaces", "purpose": "Application and platform logs", "sku": "Pay-as-you-go, 30 days" }
+    ]
+  },
+  "requirements": [
+    "Owner, or Contributor and User Access Administrator, on the target resource group: the template assigns roles to the app's managed identity",
+    "Azure Container Apps, Key Vault, Storage, Communication Services and (with Redis) Azure Managed Redis available in the subscription and region",
+    "An Azure AD B2C or Entra External ID tenant with an app registration for web sign-in (redirect URI https://<app host>/signin-oidc) and its client secret",
+    "An app registration in that tenant with the Microsoft Graph application permissions User.ReadWrite.All, UserAuthenticationMethod.ReadWrite.All and AuditLog.Read.All, admin consent granted, and its client secret",
+    "Azure AD B2C only: a sign-up/sign-in user flow or custom policy and a ROPC user flow for password checks",
+    "For SMS codes: a phone number or an alphanumeric sender ID in Azure Communication Services (can be added after deployment)",
+    "Optional: a Google OAuth client for account linking",
+    "Image reference and registry token from LinkCode"
+  ],
+  "cost": "At Azure list prices, approximately:\n\n- **Smallest setup** (Redis off, minimum replicas 0): a few USD per month for Key Vault, Storage and Log Analytics while idle, plus Container Apps for the time the app runs. The first request after an idle period waits a few seconds for a cold start.\n- **Typical setup** (Redis on, one replica always running): about 25-50 USD per month: Container Apps for one 0.5 vCPU / 1 GiB replica, Azure Managed Redis Balanced B0 (about 12 USD per month), and a few USD for the rest.\n\nWhat drives the cost: the number of running replicas, Redis, log volume, and verification messages (each e-mail and SMS segment is charged by Communication Services; an ACS phone number has a monthly fee, an alphanumeric sender ID has none). Check the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) for your region.",
+  "security": "- All resources and data stay in your subscription and the region you choose; Communication Services keeps its data in the data location you choose (Europe by default).\n- User data is read from and written to your own identity provider tenant through Microsoft Graph; the app keeps no user database. Profile photos are stored in your Storage account.\n- Client secrets and the registry token are stored in Key Vault and read by the app's managed identity; the Storage account has shared keys and public blob access turned off.\n- Sign-in uses OpenID Connect; tokens stay on the server and the browser holds only an encrypted, HTTP-only session cookie.\n- Ingress is public HTTPS only. Verification codes are sent to users by e-mail and SMS through Communication Services.\n- Nothing is sent to LinkCode. Outside your subscription the app talks only to your identity provider tenant, Google (when linking is on) and the LinkCode registry (image pull).",
+  "afterDeployment": [
+    "Add `<appUrl>/signin-oidc` as a redirect URI of the web sign-in app registration (and `<appUrl>/bff/link/google/callback` in the Google client if linking is on).",
+    "Open the `appUrl` output in a browser and sign in with a user of your tenant.",
+    "For SMS codes, set up a phone number or an alphanumeric sender ID in the Communication Services resource and deploy again with it, if you did not enter one in the form.",
+    "Optional: replace the Azure managed e-mail domain with your own domain in the Email Communication Service."
+  ]
+}
