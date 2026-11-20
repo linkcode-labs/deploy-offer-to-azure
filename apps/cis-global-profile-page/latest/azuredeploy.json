@@ -1,0 +1,611 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.49.2.45890",
+      "templateHash": "13455618276254228650"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 12,
+      "metadata": {
+        "description": "Short name used as the prefix of every resource, for example gpp-prod."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Region of the regional resources. Default: the region of the resource group."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Extra tags added to every resource, for example the tags a landing zone requires."
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "metadata": {
+        "description": "Full image reference, for example <registry>.azurecr.io/com-cis-global-profile-page:1.2.3."
+      }
+    },
+    "registryUsername": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "User name of the registry token given to this customer. Empty: the image is public and pulled anonymously."
+      }
+    },
+    "registryPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Password of the registry token given to this customer."
+      }
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 0,
+      "metadata": {
+        "description": "0 scales to zero when idle: cheapest, with a cold start of a few seconds on the next request."
+      }
+    },
+    "maxReplicas": {
+      "type": "int",
+      "defaultValue": 5,
+      "minValue": 1,
+      "metadata": {
+        "description": "Ignored without Redis: verification codes and token caches then live in memory, so the app runs as one replica."
+      }
+    },
+    "enableRedis": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Azure Managed Redis for verification codes and token caches shared by replicas. Off: one replica, in-memory caches; after a restart or scale to zero, pending codes are lost and some changes may ask the user to sign in again."
+      }
+    },
+    "identityProvider": {
+      "type": "string",
+      "allowedValues": [
+        "AzureAdB2C",
+        "EntraExternalId"
+      ],
+      "metadata": {
+        "description": "Identity provider of the users: AzureAdB2C or EntraExternalId."
+      }
+    },
+    "azureAdInstance": {
+      "type": "string",
+      "metadata": {
+        "description": "Sign-in authority host, for example https://contoso.ciamlogin.com/ or https://contoso.b2clogin.com/."
+      }
+    },
+    "azureAdDomain": {
+      "type": "string",
+      "metadata": {
+        "description": "Tenant domain, for example contoso.onmicrosoft.com."
+      }
+    },
+    "azureAdTenantId": {
+      "type": "string",
+      "metadata": {
+        "description": "Tenant id (GUID) of the identity provider tenant used for sign-in."
+      }
+    },
+    "azureAdClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client id of the web sign-in app registration."
+      }
+    },
+    "azureAdSignUpSignInPolicyId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: sign-up/sign-in user flow or custom policy. Empty for Entra External ID."
+      }
+    },
+    "azureAdClientSecret": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Client secret of the web sign-in app registration."
+      }
+    },
+    "graphTenantId": {
+      "type": "string",
+      "metadata": {
+        "description": "Tenant of the app registration that calls Microsoft Graph in the identity provider tenant."
+      }
+    },
+    "graphClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client id of the app registration that calls Microsoft Graph."
+      }
+    },
+    "graphClientSecret": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Client secret of the app registration that calls Microsoft Graph."
+      }
+    },
+    "ropcTokenEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: token endpoint of the ROPC user flow used to check the current password."
+      }
+    },
+    "ropcClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: client id used with the ROPC user flow."
+      }
+    },
+    "stepUpClaimType": {
+      "type": "string",
+      "defaultValue": "acr",
+      "metadata": {
+        "description": "Token claim checked for step-up authentication."
+      }
+    },
+    "stepUpRequiredClaimValue": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Empty: step-up authentication is off."
+      }
+    },
+    "stepUpB2CPolicy": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: user flow or custom policy used for step-up authentication."
+      }
+    },
+    "stepUpAuthenticationContextId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra External ID only: Conditional Access authentication context id used for step-up, for example c1."
+      }
+    },
+    "googleClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Google OAuth client for account linking. Empty: linking is off."
+      }
+    },
+    "googleClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Secret of the Google OAuth client for account linking."
+      }
+    },
+    "smsSender": {
+      "type": "string",
+      "defaultValue": "",
+      "maxLength": 16,
+      "metadata": {
+        "description": "SMS sender for verification codes: a phone number bought in Azure Communication Services (E.164, for example +48123456789) or an alphanumeric sender ID enabled in ACS (1-11 letters, digits or spaces, at least one letter). Until it is set, phone verification fails instead of logging codes."
+      }
+    },
+    "communicationDataLocation": {
+      "type": "string",
+      "defaultValue": "Europe",
+      "metadata": {
+        "description": "Data location of Azure Communication Services."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id, parameters('name'))]",
+    "resourceTags": "[union(createObject('application', 'global-profile-page', 'environment', parameters('name')), parameters('tags'))]",
+    "registryServer": "[split(parameters('containerImage'), '/')[0]]",
+    "roles": {
+      "keyVaultSecretsUser": "4633458b-17de-408a-b874-0445c86b69e6",
+      "storageBlobDataContributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+      "contributor": "b24988ac-6180-42a0-ab88-20f7382dd24c"
+    },
+    "compactName": "[toLower(replace(parameters('name'), '-', ''))]",
+    "secretValues": {
+      "azure-ad-client-secret": "[parameters('azureAdClientSecret')]",
+      "graph-client-secret": "[parameters('graphClientSecret')]",
+      "google-client-secret": "[parameters('googleClientSecret')]",
+      "registry-password": "[parameters('registryPassword')]"
+    },
+    "secretSettings": {
+      "Cache__Redis__ConnectionString": "[if(parameters('enableRedis'), 'redis-connection-string', '')]",
+      "AzureAd__ClientSecret": "[if(empty(parameters('azureAdClientSecret')), '', 'azure-ad-client-secret')]",
+      "IdentityProvider__ClientSecret": "[if(empty(parameters('graphClientSecret')), '', 'graph-client-secret')]",
+      "Federation__Google__ClientSecret": "[if(empty(parameters('googleClientSecret')), '', 'google-client-secret')]"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-id', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]"
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[format('{0}-logs', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enablePurgeProtection": true
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').keyVaultSecretsUser)]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').keyVaultSecretsUser)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "secrets",
+        "count": "[length(items(variables('secretValues')))]"
+      },
+      "condition": "[not(empty(items(variables('secretValues'))[copyIndex()].value))]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), items(variables('secretValues'))[copyIndex()].key)]",
+      "properties": {
+        "value": "[items(variables('secretValues'))[copyIndex()].value]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]"
+      ]
+    },
+    {
+      "condition": "[parameters('enableRedis')]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string')]",
+      "properties": {
+        "value": "[format('{0}:10000,password={1},ssl=True,abortConnect=False', reference(resourceId('Microsoft.Cache/redisEnterprise', format('{0}-redis-{1}', parameters('name'), variables('suffix'))), '2025-04-01').hostName, listKeys(resourceId('Microsoft.Cache/redisEnterprise/databases', format('{0}-redis-{1}', parameters('name'), variables('suffix')), 'default'), '2025-04-01').primaryKey)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', format('{0}-redis-{1}', parameters('name'), variables('suffix')))]",
+        "[resourceId('Microsoft.Cache/redisEnterprise/databases', format('{0}-redis-{1}', parameters('name'), variables('suffix')), 'default')]",
+        "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]"
+      ]
+    },
+    {
+      "condition": "[parameters('enableRedis')]",
+      "type": "Microsoft.Cache/redisEnterprise",
+      "apiVersion": "2025-04-01",
+      "name": "[format('{0}-redis-{1}', parameters('name'), variables('suffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "sku": {
+        "name": "Balanced_B0"
+      },
+      "properties": {
+        "minimumTlsVersion": "1.2"
+      }
+    },
+    {
+      "condition": "[parameters('enableRedis')]",
+      "type": "Microsoft.Cache/redisEnterprise/databases",
+      "apiVersion": "2025-04-01",
+      "name": "[format('{0}/{1}', format('{0}-redis-{1}', parameters('name'), variables('suffix')), 'default')]",
+      "properties": {
+        "clientProtocol": "Encrypted",
+        "port": 10000,
+        "clusteringPolicy": "EnterpriseCluster",
+        "evictionPolicy": "NoEviction",
+        "accessKeysAuthentication": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Cache/redisEnterprise', format('{0}-redis-{1}', parameters('name'), variables('suffix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_ZRS"
+      },
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": false,
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default')]",
+      "properties": {
+        "deleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'profile-photos')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'data-protection')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').storageBlobDataContributor)]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').storageBlobDataContributor)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Communication/emailServices",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}-email', parameters('name'))]",
+      "location": "global",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "dataLocation": "[parameters('communicationDataLocation')]"
+      }
+    },
+    {
+      "type": "Microsoft.Communication/emailServices/domains",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('{0}-email', parameters('name')), 'AzureManagedDomain')]",
+      "location": "global",
+      "properties": {
+        "domainManagement": "AzureManaged",
+        "userEngagementTracking": "Disabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/emailServices', format('{0}-email', parameters('name')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Communication/communicationServices",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}-acs-{1}', parameters('name'), variables('suffix'))]",
+      "location": "global",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "dataLocation": "[parameters('communicationDataLocation')]",
+        "linkedDomains": [
+          "[resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('name')), 'AzureManagedDomain')]"
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('name')), 'AzureManagedDomain')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix')))]",
+      "name": "[guid(resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').contributor)]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').contributor)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix')))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}-env', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name'))), '2023-09-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name'))), '2023-09-01').primarySharedKey]"
+          }
+        },
+        "workloadProfiles": [
+          {
+            "name": "Consumption",
+            "workloadProfileType": "Consumption"
+          }
+        ],
+        "zoneRedundant": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('name')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}-app', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))))]": {}
+        }
+      },
+      "properties": {
+        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-env', parameters('name')))]",
+        "workloadProfileName": "Consumption",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto",
+            "allowInsecure": false
+          },
+          "registries": "[if(empty(parameters('registryUsername')), createArray(), createArray(createObject('server', variables('registryServer'), 'username', parameters('registryUsername'), 'passwordSecretRef', 'registry-password')))]",
+          "secrets": "[concat(if(parameters('enableRedis'), createArray(createObject('name', 'redis-connection-string', 'keyVaultUrl', reference(resourceId('Microsoft.KeyVault/vaults/secrets', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string'), '2023-07-01').secretUri, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))))), createArray()), map(filter(items(variables('secretValues')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'keyVaultUrl', format('{0}secrets/{1}', reference(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), '2023-07-01').vaultUri, lambdaVariables('s').key), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name')))))))]"
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "web",
+              "image": "[parameters('containerImage')]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": "[concat(map(items(createObject('ASPNETCORE_ENVIRONMENT', 'Production', 'AZURE_CLIENT_ID', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), '2023-01-31').clientId, 'Authentication__Mode', 'Oidc', 'Authentication__StepUp__ClaimType', parameters('stepUpClaimType'), 'Authentication__StepUp__RequiredClaimValue', parameters('stepUpRequiredClaimValue'), 'Authentication__StepUp__B2CPolicy', parameters('stepUpB2CPolicy'), 'Authentication__StepUp__AuthenticationContextId', parameters('stepUpAuthenticationContextId'), 'AzureAd__Instance', parameters('azureAdInstance'), 'AzureAd__Domain', parameters('azureAdDomain'), 'AzureAd__TenantId', parameters('azureAdTenantId'), 'AzureAd__ClientId', parameters('azureAdClientId'), 'AzureAd__SignUpSignInPolicyId', parameters('azureAdSignUpSignInPolicyId'), 'IdentityProvider__Adapter', parameters('identityProvider'), 'IdentityProvider__TenantId', parameters('graphTenantId'), 'IdentityProvider__ClientId', parameters('graphClientId'), 'IdentityProvider__RopcTokenEndpoint', parameters('ropcTokenEndpoint'), 'IdentityProvider__RopcClientId', parameters('ropcClientId'), 'Verification__EmailSender', 'Acs', 'Verification__SmsSender', 'Acs', 'Verification__Acs__Endpoint', format('https://{0}', reference(resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix'))), '2023-04-01').hostName), 'Verification__Acs__EmailSender', format('DoNotReply@{0}', reference(resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('name')), 'AzureManagedDomain'), '2023-04-01').mailFromSenderDomain), 'Verification__Acs__SmsSender', parameters('smsSender'), 'Federation__Google__ClientId', parameters('googleClientId'), 'ProfilePhotos__Store', 'AzureBlob', 'ProfilePhotos__AccountUrl', reference(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), '2023-05-01').primaryEndpoints.blob, 'ProfilePhotos__Container', 'profile-photos', 'DataProtection__BlobUri', format('{0}{1}/keys.xml', reference(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), '2023-05-01').primaryEndpoints.blob, 'data-protection'))), lambda('s', createObject('name', lambdaVariables('s').key, 'value', lambdaVariables('s').value))), map(filter(items(variables('secretSettings')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'secretRef', lambdaVariables('s').value))))]",
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080
+                  },
+                  "periodSeconds": 30
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080
+                  },
+                  "periodSeconds": 10
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": "[if(parameters('enableRedis'), parameters('minReplicas'), min(parameters('minReplicas'), 1))]",
+            "maxReplicas": "[if(parameters('enableRedis'), parameters('maxReplicas'), 1)]",
+            "rules": [
+              {
+                "name": "http",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "50"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix')))]",
+        "[extensionResourceId(resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix'))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').contributor))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'data-protection')]",
+        "[resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('name')), 'AzureManagedDomain')]",
+        "[resourceId('Microsoft.App/managedEnvironments', format('{0}-env', parameters('name')))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'profile-photos')]",
+        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').storageBlobDataContributor))]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string')]",
+        "secrets",
+        "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]",
+        "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]",
+        "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').keyVaultSecretsUser))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "appUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "URL of the application. Add {appUrl}/signin-oidc as a redirect URI of the web sign-in app registration."
+      },
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', format('{0}-app', parameters('name'))), '2024-03-01').configuration.ingress.fqdn)]"
+    },
+    "emailSender": {
+      "type": "string",
+      "metadata": {
+        "description": "Sender address of verification e-mails (Azure managed domain)."
+      },
+      "value": "[format('DoNotReply@{0}', reference(resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('name')), 'AzureManagedDomain'), '2023-04-01').mailFromSenderDomain)]"
+    },
+    "identityClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client id of the managed identity of the app."
+      },
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), '2023-01-31').clientId]"
+    }
+  }
+}

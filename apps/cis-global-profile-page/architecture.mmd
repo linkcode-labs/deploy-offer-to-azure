@@ -1,0 +1,31 @@
+%% Architecture of Global Profile Page as deployed into the customer's subscription by deploy/azure/main.bicep.
+%% Keep it to what the template creates, plus the external things it talks to.
+flowchart LR
+  user([User]) -->|HTTPS| app
+
+  subgraph rg["Resource group (your subscription)"]
+    subgraph env["Container Apps environment"]
+      app["Global Profile Page<br/>container app<br/>(web app + API)"]
+    end
+    id["Managed identity"]
+    kv[("Key Vault<br/>secrets")]
+    st[("Storage account<br/>profile photos, cookie keys")]
+    redis[("Azure Managed Redis<br/>optional")]
+    acs["Communication Services<br/>e-mail + SMS"]
+    logs[("Log Analytics")]
+  end
+
+  idp[["Identity provider tenant<br/>Azure AD B2C or Entra External ID"]]
+  google[["Google<br/>optional account linking"]]
+  acr[["LinkCode registry"]]
+
+  app -.uses.-> id
+  app -->|secrets via identity| kv
+  app -->|blobs via identity| st
+  app -->|verification codes, token cache| redis
+  app -->|send codes via identity| acs
+  acs -->|e-mail, SMS| user
+  app -->|OpenID Connect sign-in, Microsoft Graph| idp
+  app -.OAuth.-> google
+  env -->|logs| logs
+  acr -->|image pull with token| app
