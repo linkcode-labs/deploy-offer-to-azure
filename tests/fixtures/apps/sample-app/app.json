@@ -1,0 +1,6 @@
+{
+  "title": "Sample App",
+  "description": "Fixture used by scripts/selftest.sh. Not a real application.",
+  "requirements": ["Azure Container Apps available in the region"],
+  "homepage": "https://linkcode.pl"
+}
