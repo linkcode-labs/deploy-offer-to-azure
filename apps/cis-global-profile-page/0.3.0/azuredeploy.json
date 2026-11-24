@@ -1,0 +1,948 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.48.1.52935",
+      "templateHash": "11651770296013438282"
+    }
+  },
+  "parameters": {
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 12,
+      "metadata": {
+        "description": "Short name used as the prefix of every resource, for example gpp-prod."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Region of the regional resources. Default: the region of the resource group."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Extra tags added to every resource, for example the tags a landing zone requires."
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "metadata": {
+        "description": "Full image reference, for example <registry>.azurecr.io/com-cis-global-profile-page:1.2.3."
+      }
+    },
+    "registryUsername": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "User name of the registry token given to this customer. Empty: the image is public and pulled anonymously."
+      }
+    },
+    "registryPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Password of the registry token given to this customer."
+      }
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 0,
+      "metadata": {
+        "description": "0 scales to zero when idle: cheapest, with a cold start of a few seconds on the next request."
+      }
+    },
+    "maxReplicas": {
+      "type": "int",
+      "defaultValue": 5,
+      "minValue": 1,
+      "metadata": {
+        "description": "Ignored without Redis: verification codes and token caches then live in memory, so the app runs as one replica."
+      }
+    },
+    "enableRedis": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Azure Managed Redis for verification codes and token caches shared by replicas. Off: one replica, in-memory caches; after a restart or scale to zero, pending codes are lost and some changes may ask the user to sign in again."
+      }
+    },
+    "identityProvider": {
+      "type": "string",
+      "allowedValues": [
+        "AzureAdB2C",
+        "EntraExternalId"
+      ],
+      "metadata": {
+        "description": "Identity provider of the users: AzureAdB2C or EntraExternalId."
+      }
+    },
+    "tenantName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Name of the identity provider tenant, for example contoso for contoso.onmicrosoft.com. Fills azureAdInstance, azureAdDomain and ropcTokenEndpoint when they are empty."
+      }
+    },
+    "azureAdInstance": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Sign-in authority host, for example https://contoso.ciamlogin.com/ or https://contoso.b2clogin.com/. Empty: derived from tenantName."
+      }
+    },
+    "azureAdDomain": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Tenant domain, for example contoso.onmicrosoft.com. Empty: derived from tenantName."
+      }
+    },
+    "azureAdTenantId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Tenant id (GUID) of the identity provider tenant used for sign-in. Empty with /setup, which finds it."
+      }
+    },
+    "azureAdClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Client id of the web sign-in app registration. Empty (recommended): the deployment creates the app's own multitenant registration, and a tenant administrator runs /setup once (outputs setupUrl and setupCode), which creates the registrations in the identity provider tenant and saves their settings in Key Vault."
+      }
+    },
+    "azureAdSignUpSignInPolicyId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: sign-up/sign-in user flow or custom policy. Empty for Entra External ID."
+      }
+    },
+    "azureAdClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Client secret of the web sign-in app registration. Empty with /setup."
+      }
+    },
+    "graphTenantId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Tenant of the app registration that calls Microsoft Graph in the identity provider tenant. Empty: azureAdTenantId."
+      }
+    },
+    "graphClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Client id of the app registration that calls Microsoft Graph. Empty: the web sign-in registration (azureAdClientId and azureAdClientSecret) also calls Graph."
+      }
+    },
+    "graphClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Client secret of the app registration that calls Microsoft Graph. Empty when graphClientId is empty."
+      }
+    },
+    "ropcTokenEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: token endpoint of the ROPC user flow used to check the current password. Empty: derived from tenantName and ropcPolicyId."
+      }
+    },
+    "ropcPolicyId": {
+      "type": "string",
+      "defaultValue": "B2C_1_ROPC",
+      "metadata": {
+        "description": "B2C only: name of the ROPC user flow, used with tenantName when ropcTokenEndpoint is empty."
+      }
+    },
+    "ropcClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: client id used with the ROPC user flow. Empty with /setup, which creates it."
+      }
+    },
+    "userFlow": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra External ID with /setup: the sign-up and sign-in user flow the web registration joins. Empty: add the app to a flow in the admin center."
+      }
+    },
+    "setupCode": {
+      "type": "string",
+      "defaultValue": "[newGuid()]",
+      "metadata": {
+        "description": "With /setup: the one-time code that opens it (output setupCode). A new one on every deployment; it only works while the app is not set up."
+      }
+    },
+    "stepUpClaimType": {
+      "type": "string",
+      "defaultValue": "acr",
+      "metadata": {
+        "description": "Token claim checked for step-up authentication."
+      }
+    },
+    "stepUpRequiredClaimValue": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Empty: step-up authentication is off."
+      }
+    },
+    "stepUpB2CPolicy": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "B2C only: user flow or custom policy used for step-up authentication."
+      }
+    },
+    "stepUpAuthenticationContextId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Entra External ID only: Conditional Access authentication context id used for step-up, for example c1."
+      }
+    },
+    "googleClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Google OAuth client for account linking. Empty: linking is off."
+      }
+    },
+    "googleClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Secret of the Google OAuth client for account linking."
+      }
+    },
+    "smsSender": {
+      "type": "string",
+      "defaultValue": "",
+      "maxLength": 16,
+      "metadata": {
+        "description": "SMS sender for verification codes: a phone number bought in Azure Communication Services (E.164, for example +48123456789) or an alphanumeric sender ID enabled in ACS (1-11 letters, digits or spaces, at least one letter). Until it is set, phone verification fails instead of logging codes."
+      }
+    },
+    "communicationDataLocation": {
+      "type": "string",
+      "defaultValue": "Europe",
+      "metadata": {
+        "description": "Data location of Azure Communication Services."
+      }
+    },
+    "signInActivitySource": {
+      "type": "string",
+      "defaultValue": "IdentityProvider",
+      "allowedValues": [
+        "IdentityProvider",
+        "EventHub"
+      ],
+      "metadata": {
+        "description": "Feature flag for the Recent activity page. IdentityProvider: read the tenant sign-in log through Microsoft Graph on demand (short retention). EventHub: create an event hub for the tenant Diagnostic settings and keep sign-ins in the app's own table for signInRetentionDays."
+      }
+    },
+    "signInRetentionDays": {
+      "type": "int",
+      "defaultValue": 365,
+      "minValue": 1,
+      "maxValue": 3650,
+      "metadata": {
+        "description": "Days the app keeps sign-ins when signInActivitySource is EventHub."
+      }
+    },
+    "enableMyApps": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Feature flag for the My Apps page: a list of the applications each user signed in to, built from the sign-in history and completed with names, logos and links from the tenant. Needs the Microsoft Graph application permission Application.Read.All on the Graph app registration."
+      }
+    },
+    "myAppsSource": {
+      "type": "string",
+      "defaultValue": "TokenIssuance",
+      "allowedValues": [
+        "SignInLog",
+        "TokenIssuance"
+      ],
+      "metadata": {
+        "description": "Where the My Apps page finds the applications. TokenIssuance (default): in Azure AD B2C the audit log's \"Issue an id_token to the application\" events, which name the application the user signed in to (with signInActivitySource EventHub the tenant Diagnostic setting must stream AuditLogs too); Entra External ID reads its sign-in log either way. SignInLog: the sign-in history, exactly as recorded (under B2C custom policies every sign-in is ProxyIdentityExperienceFramework)."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id, parameters('name'))]",
+    "resourceTags": "[union(createObject('application', 'global-profile-page', 'environment', parameters('name')), parameters('tags'))]",
+    "registryServer": "[split(parameters('containerImage'), '/')[0]]",
+    "roles": {
+      "keyVaultSecretsUser": "4633458b-17de-408a-b874-0445c86b69e6",
+      "keyVaultSecretsOfficer": "b86a8fe4-44ce-4948-aee5-eccb2c155cd7",
+      "storageBlobDataContributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+      "contributor": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+      "storageTableDataContributor": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
+      "eventHubsDataReceiver": "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
+    },
+    "isB2C": "[equals(parameters('identityProvider'), 'AzureAdB2C')]",
+    "resolvedDomain": "[if(not(empty(parameters('azureAdDomain'))), parameters('azureAdDomain'), format('{0}.onmicrosoft.com', parameters('tenantName')))]",
+    "resolvedInstance": "[if(not(empty(parameters('azureAdInstance'))), parameters('azureAdInstance'), if(variables('isB2C'), format('https://{0}.b2clogin.com/', parameters('tenantName')), format('https://{0}.ciamlogin.com/', parameters('tenantName'))))]",
+    "resolvedRopcTokenEndpoint": "[if(not(empty(parameters('ropcTokenEndpoint'))), parameters('ropcTokenEndpoint'), if(and(variables('isB2C'), not(empty(parameters('ropcPolicyId')))), format('https://{0}.b2clogin.com/{1}/{2}/oauth2/v2.0/token', parameters('tenantName'), variables('resolvedDomain'), parameters('ropcPolicyId')), ''))]",
+    "graphUsesSignInRegistration": "[empty(parameters('graphClientId'))]",
+    "resolvedGraphTenantId": "[if(not(empty(parameters('graphTenantId'))), parameters('graphTenantId'), parameters('azureAdTenantId'))]",
+    "resolvedGraphClientId": "[if(variables('graphUsesSignInRegistration'), parameters('azureAdClientId'), parameters('graphClientId'))]",
+    "signInsFromEventHub": "[equals(parameters('signInActivitySource'), 'EventHub')]",
+    "useSetup": "[empty(parameters('azureAdClientId'))]",
+    "tokenIssuancesFromEventHub": "[and(variables('signInsFromEventHub'), equals(parameters('myAppsSource'), 'TokenIssuance'))]",
+    "compactName": "[toLower(replace(parameters('name'), '-', ''))]",
+    "secretValues": {
+      "azure-ad-client-secret": "[parameters('azureAdClientSecret')]",
+      "graph-client-secret": "[if(variables('graphUsesSignInRegistration'), '', parameters('graphClientSecret'))]",
+      "google-client-secret": "[parameters('googleClientSecret')]",
+      "registry-password": "[parameters('registryPassword')]"
+    },
+    "secretSettings": {
+      "Cache__Redis__ConnectionString": "[if(parameters('enableRedis'), 'redis-connection-string', '')]",
+      "AzureAd__ClientSecret": "[if(empty(parameters('azureAdClientSecret')), '', 'azure-ad-client-secret')]",
+      "IdentityProvider__ClientSecret": "[if(variables('graphUsesSignInRegistration'), if(empty(parameters('azureAdClientSecret')), '', 'azure-ad-client-secret'), if(empty(parameters('graphClientSecret')), '', 'graph-client-secret'))]",
+      "Federation__Google__ClientSecret": "[if(empty(parameters('googleClientSecret')), '', 'google-client-secret')]"
+    }
+  },
+  "imports": {
+    "microsoftGraphV1": {
+      "provider": "MicrosoftGraph",
+      "version": "1.0.0"
+    }
+  },
+  "resources": {
+    "identity": {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-id', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]"
+    },
+    "setupApplication": {
+      "condition": "[variables('useSetup')]",
+      "import": "microsoftGraphV1",
+      "type": "Microsoft.Graph/applications@v1.0",
+      "properties": {
+        "uniqueName": "[format('global-profile-page-{0}-{1}', parameters('name'), variables('suffix'))]",
+        "displayName": "[format('Global Profile Page ({0})', parameters('name'))]",
+        "signInAudience": "AzureADMultipleOrgs",
+        "web": {
+          "redirectUris": [
+            "[format('{0}/setup/callback', format('https://{0}-app.{1}', parameters('name'), reference('environment').defaultDomain))]"
+          ]
+        }
+      },
+      "dependsOn": [
+        "environment"
+      ]
+    },
+    "setupFederatedCredential": {
+      "condition": "[variables('useSetup')]",
+      "import": "microsoftGraphV1",
+      "type": "Microsoft.Graph/applications/federatedIdentityCredentials@v1.0",
+      "properties": {
+        "name": "[format('{0}/container-app', reference('setupApplication').uniqueName)]",
+        "description": "The managed identity of the Global Profile Page container app.",
+        "issuer": "[format('{0}{1}/v2.0', environment().authentication.loginEndpoint, tenant().tenantId)]",
+        "subject": "[reference('identity').principalId]",
+        "audiences": [
+          "api://AzureADTokenExchange"
+        ]
+      },
+      "dependsOn": [
+        "identity",
+        "setupApplication"
+      ]
+    },
+    "logs": {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[format('{0}-logs', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30
+      }
+    },
+    "vault": {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enablePurgeProtection": true
+      }
+    },
+    "vaultSecretsUser": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').keyVaultSecretsUser)]",
+      "properties": {
+        "principalId": "[reference('identity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').keyVaultSecretsUser)]"
+      },
+      "dependsOn": [
+        "identity",
+        "vault"
+      ]
+    },
+    "vaultSecretsOfficer": {
+      "condition": "[variables('useSetup')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').keyVaultSecretsOfficer)]",
+      "properties": {
+        "principalId": "[reference('identity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').keyVaultSecretsOfficer)]"
+      },
+      "dependsOn": [
+        "identity",
+        "vault"
+      ]
+    },
+    "setupCodeSecret": {
+      "condition": "[variables('useSetup')]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), 'config--Setup--Code')]",
+      "properties": {
+        "value": "[parameters('setupCode')]"
+      },
+      "dependsOn": [
+        "vault"
+      ]
+    },
+    "secrets": {
+      "copy": {
+        "name": "secrets",
+        "count": "[length(items(variables('secretValues')))]"
+      },
+      "condition": "[not(empty(items(variables('secretValues'))[copyIndex()].value))]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), items(variables('secretValues'))[copyIndex()].key)]",
+      "properties": {
+        "value": "[items(variables('secretValues'))[copyIndex()].value]"
+      },
+      "dependsOn": [
+        "vault"
+      ]
+    },
+    "redisSecret": {
+      "condition": "[parameters('enableRedis')]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string')]",
+      "properties": {
+        "value": "[format('{0}:10000,password={1},ssl=True,abortConnect=False', reference('redis').hostName, listKeys('redisDatabase', '2025-04-01').primaryKey)]"
+      },
+      "dependsOn": [
+        "redis",
+        "redisDatabase",
+        "vault"
+      ]
+    },
+    "redis": {
+      "condition": "[parameters('enableRedis')]",
+      "type": "Microsoft.Cache/redisEnterprise",
+      "apiVersion": "2025-04-01",
+      "name": "[format('{0}-redis-{1}', parameters('name'), variables('suffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "sku": {
+        "name": "Balanced_B0"
+      },
+      "properties": {
+        "minimumTlsVersion": "1.2"
+      }
+    },
+    "redisDatabase": {
+      "condition": "[parameters('enableRedis')]",
+      "type": "Microsoft.Cache/redisEnterprise/databases",
+      "apiVersion": "2025-04-01",
+      "name": "[format('{0}/{1}', format('{0}-redis-{1}', parameters('name'), variables('suffix')), 'default')]",
+      "properties": {
+        "clientProtocol": "Encrypted",
+        "port": 10000,
+        "clusteringPolicy": "EnterpriseCluster",
+        "evictionPolicy": "NoEviction",
+        "accessKeysAuthentication": "Enabled"
+      },
+      "dependsOn": [
+        "redis"
+      ]
+    },
+    "storage": {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "kind": "StorageV2",
+      "sku": {
+        "name": "Standard_ZRS"
+      },
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": false,
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    "blobService": {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default')]",
+      "properties": {
+        "deleteRetentionPolicy": {
+          "enabled": true,
+          "days": 7
+        }
+      },
+      "dependsOn": [
+        "storage"
+      ]
+    },
+    "photos": {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'profile-photos')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "blobService"
+      ]
+    },
+    "dataProtectionContainer": {
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'data-protection')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "blobService"
+      ]
+    },
+    "photoWriter": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').storageBlobDataContributor)]",
+      "properties": {
+        "principalId": "[reference('identity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').storageBlobDataContributor)]"
+      },
+      "dependsOn": [
+        "identity",
+        "storage"
+      ]
+    },
+    "eventHubNamespace": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.EventHub/namespaces",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}-evh-{1}', parameters('name'), variables('suffix'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard",
+        "capacity": 1
+      },
+      "properties": {
+        "minimumTlsVersion": "1.2"
+      }
+    },
+    "signInLogsHub": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs')]",
+      "properties": {
+        "partitionCount": 2,
+        "messageRetentionInDays": 7
+      },
+      "dependsOn": [
+        "eventHubNamespace"
+      ]
+    },
+    "signInLogsConsumerGroup": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}/{2}', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs', 'global-profile-page')]",
+      "dependsOn": [
+        "signInLogsHub"
+      ]
+    },
+    "diagnosticSettingsRule": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.EventHub/namespaces/authorizationRules",
+      "apiVersion": "2024-01-01",
+      "name": "[format('{0}/{1}', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'entra-diagnostic-settings')]",
+      "properties": {
+        "rights": [
+          "Manage",
+          "Send",
+          "Listen"
+        ]
+      },
+      "dependsOn": [
+        "eventHubNamespace"
+      ]
+    },
+    "signInLogsReader": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs')]",
+      "name": "[guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').eventHubsDataReceiver)]",
+      "properties": {
+        "principalId": "[reference('identity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').eventHubsDataReceiver)]"
+      },
+      "dependsOn": [
+        "identity",
+        "signInLogsHub"
+      ]
+    },
+    "tableService": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.Storage/storageAccounts/tableServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default')]",
+      "dependsOn": [
+        "storage"
+      ]
+    },
+    "signInsTable": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'SignIns')]",
+      "dependsOn": [
+        "tableService"
+      ]
+    },
+    "tokenIssuancesTable": {
+      "condition": "[variables('tokenIssuancesFromEventHub')]",
+      "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'TokenIssuances')]",
+      "dependsOn": [
+        "tableService"
+      ]
+    },
+    "signInCheckpoints": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'signin-log-checkpoints')]",
+      "properties": {
+        "publicAccess": "None"
+      },
+      "dependsOn": [
+        "blobService"
+      ]
+    },
+    "signInsWriter": {
+      "condition": "[variables('signInsFromEventHub')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').storageTableDataContributor)]",
+      "properties": {
+        "principalId": "[reference('identity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').storageTableDataContributor)]"
+      },
+      "dependsOn": [
+        "identity",
+        "storage"
+      ]
+    },
+    "emailService": {
+      "type": "Microsoft.Communication/emailServices",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}-email', parameters('name'))]",
+      "location": "global",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "dataLocation": "[parameters('communicationDataLocation')]"
+      }
+    },
+    "emailDomain": {
+      "type": "Microsoft.Communication/emailServices/domains",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}/{1}', format('{0}-email', parameters('name')), 'AzureManagedDomain')]",
+      "location": "global",
+      "properties": {
+        "domainManagement": "AzureManaged",
+        "userEngagementTracking": "Disabled"
+      },
+      "dependsOn": [
+        "emailService"
+      ]
+    },
+    "communication": {
+      "type": "Microsoft.Communication/communicationServices",
+      "apiVersion": "2023-04-01",
+      "name": "[format('{0}-acs-{1}', parameters('name'), variables('suffix'))]",
+      "location": "global",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "dataLocation": "[parameters('communicationDataLocation')]",
+        "linkedDomains": [
+          "[resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('name')), 'AzureManagedDomain')]"
+        ]
+      },
+      "dependsOn": [
+        "emailDomain"
+      ]
+    },
+    "communicationSender": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix')))]",
+      "name": "[guid(resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').contributor)]",
+      "properties": {
+        "principalId": "[reference('identity').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').contributor)]"
+      },
+      "dependsOn": [
+        "communication",
+        "identity"
+      ]
+    },
+    "environment": {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}-env', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference('logs').customerId]",
+            "sharedKey": "[listKeys('logs', '2023-09-01').primarySharedKey]"
+          }
+        },
+        "workloadProfiles": [
+          {
+            "name": "Consumption",
+            "workloadProfileType": "Consumption"
+          }
+        ],
+        "zoneRedundant": false
+      },
+      "dependsOn": [
+        "logs"
+      ]
+    },
+    "app": {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}-app', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))))]": {}
+        }
+      },
+      "properties": {
+        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-env', parameters('name')))]",
+        "workloadProfileName": "Consumption",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto",
+            "allowInsecure": false
+          },
+          "registries": "[if(empty(parameters('registryUsername')), createArray(), createArray(createObject('server', variables('registryServer'), 'username', parameters('registryUsername'), 'passwordSecretRef', 'registry-password')))]",
+          "secrets": "[concat(if(parameters('enableRedis'), createArray(createObject('name', 'redis-connection-string', 'keyVaultUrl', reference('redisSecret').secretUri, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))))), createArray()), map(filter(items(variables('secretValues')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'keyVaultUrl', format('{0}secrets/{1}', reference('vault').vaultUri, lambdaVariables('s').key), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name')))))))]"
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "web",
+              "image": "[parameters('containerImage')]",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": "[concat(map(items(union(createObject('ASPNETCORE_ENVIRONMENT', 'Production', 'AZURE_CLIENT_ID', reference('identity').clientId, 'Authentication__Mode', 'Oidc', 'Authentication__StepUp__ClaimType', parameters('stepUpClaimType'), 'Authentication__StepUp__RequiredClaimValue', parameters('stepUpRequiredClaimValue'), 'Authentication__StepUp__B2CPolicy', parameters('stepUpB2CPolicy'), 'Authentication__StepUp__AuthenticationContextId', parameters('stepUpAuthenticationContextId'), 'AzureAd__Instance', variables('resolvedInstance'), 'AzureAd__Domain', variables('resolvedDomain'), 'AzureAd__TenantId', parameters('azureAdTenantId'), 'AzureAd__ClientId', parameters('azureAdClientId'), 'AzureAd__SignUpSignInPolicyId', parameters('azureAdSignUpSignInPolicyId'), 'IdentityProvider__Adapter', parameters('identityProvider'), 'IdentityProvider__TenantId', variables('resolvedGraphTenantId'), 'IdentityProvider__ClientId', if(variables('useSetup'), reference('setupApplication').appId, variables('resolvedGraphClientId')), 'IdentityProvider__RopcTokenEndpoint', variables('resolvedRopcTokenEndpoint'), 'IdentityProvider__RopcClientId', parameters('ropcClientId'), 'Verification__EmailSender', 'Acs', 'Verification__SmsSender', 'Acs', 'Verification__Acs__Endpoint', format('https://{0}', reference('communication').hostName), 'Verification__Acs__EmailSender', format('DoNotReply@{0}', reference('emailDomain').mailFromSenderDomain), 'Verification__Acs__SmsSender', parameters('smsSender'), 'Federation__Google__ClientId', parameters('googleClientId'), 'ProfilePhotos__Store', 'AzureBlob', 'ProfilePhotos__AccountUrl', reference('storage').primaryEndpoints.blob, 'ProfilePhotos__Container', 'profile-photos', 'DataProtection__BlobUri', format('{0}{1}/keys.xml', reference('storage').primaryEndpoints.blob, 'data-protection'), 'SignInActivity__Source', parameters('signInActivitySource'), 'MyApps__Enabled', string(parameters('enableMyApps')), 'MyApps__Source', parameters('myAppsSource')), if(variables('useSetup'), createObject('Setup__Enabled', 'true', 'Setup__Name', parameters('name'), 'Setup__PublicUrl', format('https://{0}-app.{1}', parameters('name'), reference('environment').defaultDomain), 'Setup__TenantName', parameters('tenantName'), 'Setup__ClientId', reference('setupApplication').appId, 'Setup__KeyVaultUri', reference('vault').vaultUri, 'Setup__SignUpSignInPolicyId', if(empty(parameters('azureAdSignUpSignInPolicyId')), 'B2C_1_susi', parameters('azureAdSignUpSignInPolicyId')), 'Setup__RopcPolicyId', if(empty(parameters('ropcPolicyId')), 'B2C_1_ROPC', parameters('ropcPolicyId')), 'Setup__UserFlow', parameters('userFlow'), 'IdentityProvider__ManagedIdentityFederation', 'true'), createObject()), if(variables('signInsFromEventHub'), createObject('SignInActivity__Store', 'AzureTable', 'SignInActivity__RetentionDays', string(parameters('signInRetentionDays')), 'SignInActivity__Table__AccountUrl', reference('storage').primaryEndpoints.table, 'SignInActivity__Table__TableName', 'SignIns', 'SignInActivity__Table__TokenIssuanceTableName', if(variables('tokenIssuancesFromEventHub'), 'TokenIssuances', 'TokenIssuances'), 'SignInActivity__EventHub__FullyQualifiedNamespace', format('{0}.servicebus.windows.net', format('{0}-evh-{1}', parameters('name'), variables('suffix'))), 'SignInActivity__EventHub__EventHubName', 'signin-logs', 'SignInActivity__EventHub__ConsumerGroup', 'global-profile-page', 'SignInActivity__EventHub__CheckpointAccountUrl', reference('storage').primaryEndpoints.blob, 'SignInActivity__EventHub__CheckpointContainer', 'signin-log-checkpoints'), createObject()))), lambda('s', createObject('name', lambdaVariables('s').key, 'value', lambdaVariables('s').value))), map(filter(items(variables('secretSettings')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'secretRef', lambdaVariables('s').value))))]",
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080
+                  },
+                  "periodSeconds": 30
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/health",
+                    "port": 8080
+                  },
+                  "periodSeconds": 10
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": "[if(parameters('enableRedis'), parameters('minReplicas'), min(parameters('minReplicas'), 1))]",
+            "maxReplicas": "[if(parameters('enableRedis'), parameters('maxReplicas'), 1)]",
+            "rules": [
+              {
+                "name": "http",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "50"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "dependsOn": [
+        "communication",
+        "communicationSender",
+        "dataProtectionContainer",
+        "emailDomain",
+        "environment",
+        "eventHubNamespace",
+        "identity",
+        "photos",
+        "photoWriter",
+        "redisSecret",
+        "secrets",
+        "setupApplication",
+        "setupCodeSecret",
+        "setupFederatedCredential",
+        "signInCheckpoints",
+        "signInLogsConsumerGroup",
+        "signInLogsHub",
+        "signInLogsReader",
+        "signInsTable",
+        "signInsWriter",
+        "storage",
+        "tokenIssuancesTable",
+        "vault",
+        "vaultSecretsOfficer",
+        "vaultSecretsUser"
+      ]
+    }
+  },
+  "outputs": {
+    "appUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "URL of the application. Without /setup, add {appUrl}/signin-oidc as a redirect URI of the web sign-in app registration."
+      },
+      "value": "[format('https://{0}', reference('app').configuration.ingress.fqdn)]"
+    },
+    "signInRedirectUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Without /setup: add this redirect URI to the web sign-in app registration (Authentication > Web), then sign in at appUrl."
+      },
+      "value": "[format('https://{0}/signin-oidc', reference('app').configuration.ingress.fqdn)]"
+    },
+    "setupUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "With /setup: open this page, enter setupCode and sign in as an administrator of the identity provider tenant. Empty otherwise."
+      },
+      "value": "[if(variables('useSetup'), format('https://{0}/setup', reference('app').configuration.ingress.fqdn), '')]"
+    },
+    "setupCode": {
+      "type": "string",
+      "metadata": {
+        "description": "With /setup: the one-time code the setup page asks for. Empty otherwise."
+      },
+      "value": "[if(variables('useSetup'), parameters('setupCode'), '')]"
+    },
+    "setupClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "With /setup: client id of the app's multitenant registration in this subscription's tenant (its Microsoft Graph identity). Empty otherwise."
+      },
+      "value": "[if(variables('useSetup'), reference('setupApplication').appId, '')]"
+    },
+    "emailSender": {
+      "type": "string",
+      "metadata": {
+        "description": "Sender address of verification e-mails (Azure managed domain)."
+      },
+      "value": "[format('DoNotReply@{0}', reference('emailDomain').mailFromSenderDomain)]"
+    },
+    "identityClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client id of the managed identity of the app."
+      },
+      "value": "[reference('identity').clientId]"
+    },
+    "signInLogsAuthorizationRuleId": {
+      "type": "string",
+      "metadata": {
+        "description": "Feature flag EventHub only: event hub authorization rule to select in the tenant's Diagnostic settings (category SignInLogs, plus AuditLogs when myAppsSource is TokenIssuance). Empty otherwise."
+      },
+      "value": "[if(variables('signInsFromEventHub'), resourceId('Microsoft.EventHub/namespaces/authorizationRules', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'entra-diagnostic-settings'), '')]"
+    },
+    "signInLogsEventHubName": {
+      "type": "string",
+      "metadata": {
+        "description": "Feature flag EventHub only: event hub name to select in the tenant's Diagnostic settings. Empty otherwise."
+      },
+      "value": "[if(variables('signInsFromEventHub'), 'signin-logs', '')]"
+    }
+  }
+}

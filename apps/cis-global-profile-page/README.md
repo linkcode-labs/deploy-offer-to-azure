@@ -6,7 +6,7 @@ Self-service account page for users of Azure AD B2C or Entra External ID: profil
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2FcreateUiDefinition.json)
 
-Version **0.2.0** · [all versions](#versions)
+Version **0.3.0** · [all versions](#versions)
 
 ## Overview
 
@@ -31,7 +31,7 @@ It is meant for organisations that run a B2C or External ID tenant for customers
 
 Users open the app over HTTPS and sign in with OpenID Connect against your Azure AD B2C or Entra External ID tenant. The app is one container in a new Container Apps environment: it serves the web interface and its API, keeps the session in an encrypted cookie and holds the tokens on the server.
 
-Profile changes, sign-in methods and sign-in activity are read and written in your identity provider tenant through Microsoft Graph, with an app registration you create. Profile photos and the keys that protect sign-in cookies are stored in a Storage account. Verification codes are sent by e-mail and SMS through Azure Communication Services (e-mail from an Azure managed domain). With Redis on, verification codes and token caches live in Azure Managed Redis so the app can run more than one replica; with Redis off the app runs as one replica with in-memory caches.
+Profile changes, sign-in methods and sign-in activity are read and written in your identity provider tenant through Microsoft Graph, with the app registration you create. Profile photos and the keys that protect sign-in cookies are stored in a Storage account. Verification codes are sent by e-mail and SMS through Azure Communication Services (e-mail from an Azure managed domain). With Redis on, verification codes and token caches live in Azure Managed Redis so the app can run more than one replica; with Redis off the app runs as one replica with in-memory caches.
 
 The app reaches Key Vault, Storage and Communication Services with its managed identity; client secrets and the registry token are kept in Key Vault. Logs go to a Log Analytics workspace. Outside the resource group the app talks only to your identity provider tenant, to Google when account linking is on, and to the LinkCode registry to pull its image.
 
@@ -87,8 +87,8 @@ flowchart LR
 
 - Owner, or Contributor and User Access Administrator, on the target resource group: the template assigns roles to the app's managed identity
 - Azure Container Apps, Key Vault, Storage, Communication Services and (with Redis) Azure Managed Redis available in the subscription and region
-- An Azure AD B2C or Entra External ID tenant with an app registration for web sign-in (redirect URI https://<app host>/signin-oidc) and its client secret
-- An app registration in that tenant with the Microsoft Graph application permissions User.ReadWrite.All, UserAuthenticationMethod.ReadWrite.All and AuditLog.Read.All, admin consent granted, and its client secret
+- An Azure AD B2C or Entra External ID tenant with one app registration for web sign-in and its client secret; the redirect URI is added after the deployment
+- Microsoft Graph application permissions on that registration (or on a separate one): User.ReadWrite.All, UserAuthenticationMethod.ReadWrite.All and AuditLog.Read.All (plus Application.Read.All for the optional My Apps page), with admin consent
 - Azure AD B2C only: a sign-up/sign-in user flow or custom policy and a ROPC user flow for password checks
 - For SMS codes: a phone number or an alphanumeric sender ID in Azure Communication Services (can be added after deployment)
 - Optional: a Google OAuth client for account linking
@@ -112,7 +112,7 @@ What drives the cost: the number of running replicas, Redis, log volume, and ver
 - Ingress is public HTTPS only. Verification codes are sent to users by e-mail and SMS through Communication Services.
 - Nothing is sent to LinkCode. Outside your subscription the app talks only to your identity provider tenant, Google (when linking is on) and the LinkCode registry (image pull).
 
-## Deployment parameters (version 0.2.0)
+## Deployment parameters (version 0.3.0)
 
 The portal form fills these in; the table is for reference and scripted deployments.
 
@@ -128,17 +128,21 @@ The portal form fills these in; the table is for reference and scripted deployme
 | `maxReplicas` | int | no | `5` | Ignored without Redis: verification codes and token caches then live in memory, so the app runs as one replica. |
 | `enableRedis` | bool | no | `true` | Azure Managed Redis for verification codes and token caches shared by replicas. Off: one replica, in-memory caches; after a restart or scale to zero, pending codes are lost and some changes may ask the user to sign in again. |
 | `identityProvider` | string | yes |  | Identity provider of the users: AzureAdB2C or EntraExternalId. |
-| `azureAdInstance` | string | yes |  | Sign-in authority host, for example https://contoso.ciamlogin.com/ or https://contoso.b2clogin.com/. |
-| `azureAdDomain` | string | yes |  | Tenant domain, for example contoso.onmicrosoft.com. |
-| `azureAdTenantId` | string | yes |  | Tenant id (GUID) of the identity provider tenant used for sign-in. |
-| `azureAdClientId` | string | yes |  | Client id of the web sign-in app registration. |
+| `tenantName` | string | no | `` | Name of the identity provider tenant, for example contoso for contoso.onmicrosoft.com. Fills azureAdInstance, azureAdDomain and ropcTokenEndpoint when they are empty. |
+| `azureAdInstance` | string | no | `` | Sign-in authority host, for example https://contoso.ciamlogin.com/ or https://contoso.b2clogin.com/. Empty: derived from tenantName. |
+| `azureAdDomain` | string | no | `` | Tenant domain, for example contoso.onmicrosoft.com. Empty: derived from tenantName. |
+| `azureAdTenantId` | string | no | `` | Tenant id (GUID) of the identity provider tenant used for sign-in. Empty with /setup, which finds it. |
+| `azureAdClientId` | string | no | `` | Client id of the web sign-in app registration. Empty (recommended): the deployment creates the app's own multitenant registration, and a tenant administrator runs /setup once (outputs setupUrl and setupCode), which creates the registrations in the identity provider tenant and saves their settings in Key Vault. |
 | `azureAdSignUpSignInPolicyId` | string | no | `` | B2C only: sign-up/sign-in user flow or custom policy. Empty for Entra External ID. |
-| `azureAdClientSecret` | securestring | yes |  | Client secret of the web sign-in app registration. |
-| `graphTenantId` | string | yes |  | Tenant of the app registration that calls Microsoft Graph in the identity provider tenant. |
-| `graphClientId` | string | yes |  | Client id of the app registration that calls Microsoft Graph. |
-| `graphClientSecret` | securestring | yes |  | Client secret of the app registration that calls Microsoft Graph. |
-| `ropcTokenEndpoint` | string | no | `` | B2C only: token endpoint of the ROPC user flow used to check the current password. |
-| `ropcClientId` | string | no | `` | B2C only: client id used with the ROPC user flow. |
+| `azureAdClientSecret` | securestring | no |  | Client secret of the web sign-in app registration. Empty with /setup. |
+| `graphTenantId` | string | no | `` | Tenant of the app registration that calls Microsoft Graph in the identity provider tenant. Empty: azureAdTenantId. |
+| `graphClientId` | string | no | `` | Client id of the app registration that calls Microsoft Graph. Empty: the web sign-in registration (azureAdClientId and azureAdClientSecret) also calls Graph. |
+| `graphClientSecret` | securestring | no |  | Client secret of the app registration that calls Microsoft Graph. Empty when graphClientId is empty. |
+| `ropcTokenEndpoint` | string | no | `` | B2C only: token endpoint of the ROPC user flow used to check the current password. Empty: derived from tenantName and ropcPolicyId. |
+| `ropcPolicyId` | string | no | `B2C_1_ROPC` | B2C only: name of the ROPC user flow, used with tenantName when ropcTokenEndpoint is empty. |
+| `ropcClientId` | string | no | `` | B2C only: client id used with the ROPC user flow. Empty with /setup, which creates it. |
+| `userFlow` | string | no | `` | Entra External ID with /setup: the sign-up and sign-in user flow the web registration joins. Empty: add the app to a flow in the admin center. |
+| `setupCode` | string | no | `[newGuid()]` | With /setup: the one-time code that opens it (output setupCode). A new one on every deployment; it only works while the app is not set up. |
 | `stepUpClaimType` | string | no | `acr` | Token claim checked for step-up authentication. |
 | `stepUpRequiredClaimValue` | string | no | `` | Empty: step-up authentication is off. |
 | `stepUpB2CPolicy` | string | no | `` | B2C only: user flow or custom policy used for step-up authentication. |
@@ -147,6 +151,10 @@ The portal form fills these in; the table is for reference and scripted deployme
 | `googleClientSecret` | securestring | no |  | Secret of the Google OAuth client for account linking. |
 | `smsSender` | string | no | `` | SMS sender for verification codes: a phone number bought in Azure Communication Services (E.164, for example +48123456789) or an alphanumeric sender ID enabled in ACS (1-11 letters, digits or spaces, at least one letter). Until it is set, phone verification fails instead of logging codes. |
 | `communicationDataLocation` | string | no | `Europe` | Data location of Azure Communication Services. |
+| `signInActivitySource` | string | no | `IdentityProvider` | Feature flag for the Recent activity page. IdentityProvider: read the tenant sign-in log through Microsoft Graph on demand (short retention). EventHub: create an event hub for the tenant Diagnostic settings and keep sign-ins in the app's own table for signInRetentionDays. |
+| `signInRetentionDays` | int | no | `365` | Days the app keeps sign-ins when signInActivitySource is EventHub. |
+| `enableMyApps` | bool | no | `false` | Feature flag for the My Apps page: a list of the applications each user signed in to, built from the sign-in history and completed with names, logos and links from the tenant. Needs the Microsoft Graph application permission Application.Read.All on the Graph app registration. |
+| `myAppsSource` | string | no | `TokenIssuance` | Where the My Apps page finds the applications. TokenIssuance (default): in Azure AD B2C the audit log's "Issue an id_token to the application" events, which name the application the user signed in to (with signInActivitySource EventHub the tenant Diagnostic setting must stream AuditLogs too); Entra External ID reads its sign-in log either way. SignInLog: the sign-in history, exactly as recorded (under B2C custom policies every sign-in is ProxyIdentityExperienceFramework). |
 
 ## After deployment
 
@@ -154,11 +162,17 @@ Deployment outputs (Azure portal > resource group > Deployments):
 
 | Output | Type | Description |
 |---|---|---|
-| `appUrl` | string | URL of the application. Add {appUrl}/signin-oidc as a redirect URI of the web sign-in app registration. |
+| `appUrl` | string | URL of the application. Without /setup, add {appUrl}/signin-oidc as a redirect URI of the web sign-in app registration. |
+| `signInRedirectUri` | string | Without /setup: add this redirect URI to the web sign-in app registration (Authentication > Web), then sign in at appUrl. |
+| `setupUrl` | string | With /setup: open this page, enter setupCode and sign in as an administrator of the identity provider tenant. Empty otherwise. |
+| `setupCode` | string | With /setup: the one-time code the setup page asks for. Empty otherwise. |
+| `setupClientId` | string | With /setup: client id of the app's multitenant registration in this subscription's tenant (its Microsoft Graph identity). Empty otherwise. |
 | `emailSender` | string | Sender address of verification e-mails (Azure managed domain). |
 | `identityClientId` | string | Client id of the managed identity of the app. |
+| `signInLogsAuthorizationRuleId` | string | Feature flag EventHub only: event hub authorization rule to select in the tenant's Diagnostic settings (category SignInLogs, plus AuditLogs when myAppsSource is TokenIssuance). Empty otherwise. |
+| `signInLogsEventHubName` | string | Feature flag EventHub only: event hub name to select in the tenant's Diagnostic settings. Empty otherwise. |
 
-1. Add `<appUrl>/signin-oidc` as a redirect URI of the web sign-in app registration (and `<appUrl>/bff/link/google/callback` in the Google client if linking is on).
+1. Add the `signInRedirectUri` output as a redirect URI of the web sign-in app registration (and `<appUrl>/bff/link/google/callback` in the Google client if linking is on).
 2. Open the `appUrl` output in a browser and sign in with a user of your tenant.
 3. For SMS codes, set up a phone number or an alphanumeric sender ID in the Communication Services resource and deploy again with it, if you did not enter one in the form.
 4. Optional: replace the Azure managed e-mail domain with your own domain in the Email Communication Service.
@@ -167,4 +181,5 @@ Deployment outputs (Azure portal > resource group > Deployments):
 
 | Version | Deploy | Files | Release notes |
 |---|---|---|---|
+| 0.3.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.3.0/azuredeploy.json), [createUiDefinition.json](0.3.0/createUiDefinition.json) |  |
 | 0.2.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.2.0/azuredeploy.json), [createUiDefinition.json](0.2.0/createUiDefinition.json) |  |
