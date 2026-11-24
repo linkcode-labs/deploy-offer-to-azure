@@ -11,7 +11,7 @@ Azure creates the resources in your subscription. Nothing is deployed until you 
 
 | Application | Description | Version | Deploy |
 |---|---|---|---|
-| [Global Profile Page](apps/cis-global-profile-page/README.md) | Self-service account page for users of Azure AD B2C or Entra External ID: profile, password, sign-in methods and activity. | 0.2.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2FcreateUiDefinition.json) |
+| [Global Profile Page](apps/cis-global-profile-page/README.md) | Self-service account page for users of Azure AD B2C or Entra External ID: profile, password, sign-in methods and activity. | 0.3.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2FcreateUiDefinition.json) |
 
 <!-- apps:end -->
 
