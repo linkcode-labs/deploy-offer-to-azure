@@ -1,0 +1,573 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "Global Profile Page: a self-service account page for users of Azure AD B2C or Entra External ID, running on Azure Container Apps.",
+        "location": {
+          "label": "Region",
+          "toolTip": "Region of the Container Apps environment and the other regional resources.",
+          "resourceTypes": [
+            "Microsoft.App/managedEnvironments"
+          ]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "name",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Workload name",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-z0-9][a-z0-9-]{1,10}[a-z0-9]$",
+          "validationMessage": "Use 3 to 12 lowercase letters, digits or hyphens, not starting or ending with a hyphen."
+        },
+        "defaultValue": "gpp",
+        "toolTip": "Used in every resource name after the Microsoft abbreviation of its type (ca-, cae-, kv-, st, id-, log-...). 3 to 12 lowercase letters, digits or hyphens."
+      }
+    ],
+    "steps": [
+      {
+        "name": "image",
+        "label": "Application image",
+        "elements": [
+          {
+            "name": "info",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "The image of this version is filled in. Enter the registry token you received from LinkCode."
+            }
+          },
+          {
+            "name": "containerImage",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Image",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+|@sha256:[a-f0-9]{64})$",
+              "validationMessage": "Enter a full image reference: registry/repository:tag."
+            },
+            "toolTip": "Change it only to deploy another version or registry.",
+            "defaultValue": "acrlinkcodedemo.azurecr.io/com-cis-global-profile-page:0.4.0"
+          },
+          {
+            "name": "registryUsername",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Registry token name",
+            "constraints": {
+              "required": false
+            },
+            "toolTip": "Empty only for a public image."
+          },
+          {
+            "name": "registryPassword",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Registry token password"
+            },
+            "options": {
+              "hideConfirmation": true
+            },
+            "constraints": {
+              "required": false
+            },
+            "visible": "[not(empty(steps('image').registryUsername))]"
+          }
+        ]
+      },
+      {
+        "name": "identity",
+        "label": "Sign-in",
+        "elements": [
+          {
+            "name": "identityProvider",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Identity provider",
+            "defaultValue": "Entra External ID",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Entra External ID",
+                  "value": "EntraExternalId"
+                },
+                {
+                  "label": "Azure AD B2C",
+                  "value": "AzureAdB2C"
+                }
+              ]
+            }
+          },
+          {
+            "name": "tenantName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Tenant name",
+            "constraints": {
+              "required": true,
+              "regex": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "validationMessage": "Enter the part before .onmicrosoft.com, in lowercase."
+            },
+            "toolTip": "For example contoso for contoso.onmicrosoft.com. The sign-in host (contoso.b2clogin.com or contoso.ciamlogin.com) is derived from it."
+          },
+          {
+            "name": "registrations",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "App registrations",
+            "defaultValue": "Created by /setup after the deployment (recommended)",
+            "toolTip": "Recommended: after the deployment a tenant administrator opens the setupUrl output, enters setupCode and signs in once; the app creates its registrations, permissions and the B2C ROPC flow itself, and calls Microsoft Graph with its managed identity (no Graph secret). The deployment needs permission to create an app registration in this subscription's tenant.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "Created by /setup after the deployment (recommended)",
+                  "value": "setup"
+                },
+                {
+                  "label": "I created them myself",
+                  "value": "manual"
+                }
+              ],
+              "required": true
+            },
+            "visible": true
+          },
+          {
+            "name": "setupInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[equals(steps('identity').registrations, 'setup')]",
+            "options": {
+              "icon": "Info",
+              "text": "After the deployment, open the setupUrl output and enter setupCode. Sign in there as a Global Administrator of the B2C or External ID tenant; setup takes about two minutes and restarts the app."
+            }
+          },
+          {
+            "name": "azureAdTenantId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Tenant id",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a GUID."
+            },
+            "visible": "[equals(steps('identity').registrations, 'manual')]"
+          },
+          {
+            "name": "azureAdClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Client id",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a GUID."
+            },
+            "toolTip": "App registration with redirect URI https://<app host>/signin-oidc (add it after the deployment, the app host is shown in the outputs). It also calls Microsoft Graph unless you choose a separate registration in the next step.",
+            "visible": "[equals(steps('identity').registrations, 'manual')]"
+          },
+          {
+            "name": "azureAdClientSecret",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Client secret"
+            },
+            "options": {
+              "hideConfirmation": true
+            },
+            "constraints": {
+              "required": true
+            },
+            "visible": "[equals(steps('identity').registrations, 'manual')]"
+          },
+          {
+            "name": "azureAdSignUpSignInPolicyId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Sign-up/sign-in policy",
+            "constraints": {
+              "required": true
+            },
+            "toolTip": "A user flow (B2C_1_…) or custom policy (B2C_1A_…). With /setup, a built-in user flow that does not exist yet is created.",
+            "visible": "[equals(steps('identity').identityProvider, 'AzureAdB2C')]",
+            "defaultValue": "B2C_1_susi"
+          },
+          {
+            "name": "userFlow",
+            "type": "Microsoft.Common.TextBox",
+            "label": "User flow (optional)",
+            "toolTip": "Entra External ID: name of the sign-up and sign-in user flow /setup adds the app to. Empty: add the app to a flow in the Microsoft Entra admin center.",
+            "defaultValue": "",
+            "constraints": {
+              "required": false
+            },
+            "visible": "[and(equals(steps('identity').identityProvider, 'EntraExternalId'), equals(steps('identity').registrations, 'setup'))]"
+          }
+        ]
+      },
+      {
+        "name": "graph",
+        "label": "Microsoft Graph",
+        "elements": [
+          {
+            "name": "info",
+            "type": "Microsoft.Common.InfoBox",
+            "options": {
+              "icon": "Info",
+              "text": "The registration that calls Microsoft Graph needs the application permissions User.ReadWrite.All, UserAuthenticationMethod.ReadWrite.All and AuditLog.Read.All (and Application.Read.All when the My Apps page is on), with admin consent."
+            },
+            "visible": "[equals(steps('identity').registrations, 'manual')]"
+          },
+          {
+            "name": "useSignInRegistration",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "Registration for Microsoft Graph",
+            "defaultValue": "Same as sign-in",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                {
+                  "label": "Same as sign-in",
+                  "value": "same"
+                },
+                {
+                  "label": "Separate registration",
+                  "value": "separate"
+                }
+              ]
+            },
+            "visible": "[equals(steps('identity').registrations, 'manual')]"
+          },
+          {
+            "name": "graphClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Client id",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a GUID."
+            },
+            "visible": "[and(equals(steps('identity').registrations, 'manual'), equals(steps('graph').useSignInRegistration, 'separate'))]"
+          },
+          {
+            "name": "graphClientSecret",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Client secret"
+            },
+            "options": {
+              "hideConfirmation": true
+            },
+            "constraints": {
+              "required": true
+            },
+            "visible": "[and(equals(steps('identity').registrations, 'manual'), equals(steps('graph').useSignInRegistration, 'separate'))]"
+          },
+          {
+            "name": "ropcPolicyId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "ROPC user flow",
+            "defaultValue": "B2C_1_ROPC",
+            "constraints": {
+              "required": true
+            },
+            "toolTip": "B2C only: the user flow (resource owner password credentials) that checks the current password before a password change. With /setup, a missing built-in flow is created.",
+            "visible": "[equals(steps('identity').identityProvider, 'AzureAdB2C')]"
+          },
+          {
+            "name": "ropcClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "ROPC client id",
+            "constraints": {
+              "required": true,
+              "regex": "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a GUID."
+            },
+            "toolTip": "B2C only: public client registration used with the ROPC user flow.",
+            "visible": "[and(equals(steps('identity').identityProvider, 'AzureAdB2C'), equals(steps('identity').registrations, 'manual'))]"
+          }
+        ]
+      },
+      {
+        "name": "options",
+        "label": "Options",
+        "elements": [
+          {
+            "name": "stepUpRequiredClaimValue",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Step-up required claim value",
+            "constraints": {
+              "required": false
+            },
+            "toolTip": "Empty: step-up authentication is off."
+          },
+          {
+            "name": "stepUpClaimType",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Step-up claim type",
+            "constraints": {
+              "required": false
+            },
+            "defaultValue": "acr",
+            "visible": "[not(empty(steps('options').stepUpRequiredClaimValue))]"
+          },
+          {
+            "name": "stepUpB2CPolicy",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Step-up B2C policy",
+            "constraints": {
+              "required": false
+            },
+            "visible": "[and(equals(steps('identity').identityProvider, 'AzureAdB2C'), not(empty(steps('options').stepUpRequiredClaimValue)))]"
+          },
+          {
+            "name": "stepUpAuthenticationContextId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Step-up authentication context id",
+            "constraints": {
+              "required": false
+            },
+            "toolTip": "Entra External ID: Conditional Access authentication context, for example c1.",
+            "visible": "[and(equals(steps('identity').identityProvider, 'EntraExternalId'), not(empty(steps('options').stepUpRequiredClaimValue)))]"
+          },
+          {
+            "name": "googleClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Google client id",
+            "constraints": {
+              "required": false
+            },
+            "toolTip": "Turns Google account linking on. Redirect URI: https://<app host>/bff/link/google/callback."
+          },
+          {
+            "name": "googleClientSecret",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Google client secret"
+            },
+            "options": {
+              "hideConfirmation": true
+            },
+            "constraints": {
+              "required": false
+            },
+            "visible": "[not(empty(steps('options').googleClientId))]"
+          },
+          {
+            "name": "enableVerificationCodes",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "Add e-mail or phone with a code",
+            "defaultValue": "On",
+            "toolTip": "Lets users add an e-mail address (and, with an SMS sender, a phone number) as a sign-in method after confirming a one-time code. The codes are sent by Azure Communication Services, which the deployment creates. Off: no Communication Services resources, and the Security page does not offer adding these methods. Sign-in, sign-up and password reset e-mails are sent by the identity provider and are not affected.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "On",
+                  "value": true
+                },
+                {
+                  "label": "Off",
+                  "value": false
+                }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "smsSenderType",
+            "visible": "[steps('options').enableVerificationCodes]",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "SMS sender",
+            "defaultValue": "None (set later)",
+            "toolTip": "Phone verification sends codes from Azure Communication Services. A phone number has a monthly fee; an alphanumeric sender ID (for example the company name) has none but must be enabled in ACS and is only supported in some countries, Poland included. Recipients cannot reply to it.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "None (set later)",
+                  "value": "none"
+                },
+                {
+                  "label": "Phone number",
+                  "value": "number"
+                },
+                {
+                  "label": "Alphanumeric sender ID",
+                  "value": "alphanumeric"
+                }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "smsSenderNumber",
+            "type": "Microsoft.Common.TextBox",
+            "label": "SMS sender number",
+            "constraints": {
+              "required": true,
+              "regex": "^\\+[1-9][0-9]{6,14}$",
+              "validationMessage": "Enter a number in E.164 format, for example +48123456789."
+            },
+            "toolTip": "Phone number bought in Azure Communication Services.",
+            "visible": "[and(steps('options').enableVerificationCodes, equals(steps('options').smsSenderType, 'number'))]"
+          },
+          {
+            "name": "smsSenderId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "SMS sender ID",
+            "constraints": {
+              "required": true,
+              "regex": "^(?=.*[A-Za-z])[A-Za-z0-9 ]{1,11}$",
+              "validationMessage": "Use 1-11 letters, digits or spaces, with at least one letter, for example CIS."
+            },
+            "toolTip": "Alphanumeric sender ID enabled in Azure Communication Services (Phone numbers, Alphanumeric sender ID).",
+            "visible": "[and(steps('options').enableVerificationCodes, equals(steps('options').smsSenderType, 'alphanumeric'))]"
+          },
+          {
+            "name": "signInActivitySource",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "Sign-in history",
+            "defaultValue": "Microsoft Graph (on demand)",
+            "toolTip": "Microsoft Graph: the Recent activity page reads the tenant sign-in log on demand (B2C keeps 7 days). Event Hub: creates an event hub for the tenant Diagnostic settings and keeps sign-ins in the app's own table (Event Hubs Standard costs extra). After deployment, create the Diagnostic setting in the tenant as described in docs/sign-in-activity.md.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "Microsoft Graph (on demand)",
+                  "value": "IdentityProvider"
+                },
+                {
+                  "label": "Event Hub (own history)",
+                  "value": "EventHub"
+                }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "signInRetentionDays",
+            "type": "Microsoft.Common.Slider",
+            "label": "Sign-in history retention (days)",
+            "min": 30,
+            "max": 730,
+            "defaultValue": 365,
+            "showStepMarkers": false,
+            "visible": "[equals(steps('options').signInActivitySource, 'EventHub')]"
+          },
+          {
+            "name": "enableMyApps",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "My Apps page",
+            "defaultValue": "Off",
+            "toolTip": "Shows users the applications they signed in to, built from the sign-in history (with Microsoft Graph as the source only the last 7 days in B2C or 30 days in External ID). Needs the Microsoft Graph application permission Application.Read.All on the Graph app registration, to read app names, logos and links.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "Off",
+                  "value": false
+                },
+                {
+                  "label": "On",
+                  "value": true
+                }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "myAppsSource",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "My Apps source",
+            "defaultValue": "Token issuances",
+            "toolTip": "Token issuances: the B2C audit log's 'Issue an id_token to the application' events, which name the app the user signed in to (with the Event Hub sign-in history, also stream AuditLogs, docs/my-apps.md). Sign-in history: apps exactly as the sign-in log records them (with B2C custom policies every sign-in is ProxyIdentityExperienceFramework).",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "Token issuances",
+                  "value": "TokenIssuance"
+                },
+                {
+                  "label": "Sign-in history",
+                  "value": "SignInLog"
+                }
+              ],
+              "required": true
+            },
+            "visible": "[and(equals(steps('options').enableMyApps, true), equals(steps('identity').identityProvider, 'AzureAdB2C'))]"
+          },
+          {
+            "name": "enableRedis",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "Redis cache",
+            "defaultValue": "On",
+            "toolTip": "Azure Managed Redis shares verification codes and token caches between replicas. Without it the app runs as one replica and pending codes are lost on restart or scale to zero.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "On",
+                  "value": "on"
+                },
+                {
+                  "label": "Off (one replica, lower cost)",
+                  "value": "off"
+                }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "minReplicas",
+            "type": "Microsoft.Common.Slider",
+            "label": "Minimum replicas",
+            "min": 0,
+            "max": 10,
+            "defaultValue": 1,
+            "showStepMarkers": false,
+            "toolTip": "0 scales to zero when idle: cheapest, with a cold start of a few seconds on the next request."
+          },
+          {
+            "name": "maxReplicas",
+            "type": "Microsoft.Common.Slider",
+            "label": "Maximum replicas",
+            "min": 1,
+            "max": 30,
+            "defaultValue": 5,
+            "showStepMarkers": false,
+            "visible": "[equals(steps('options').enableRedis, 'on')]"
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "name": "[basics('name')]",
+      "containerImage": "[steps('image').containerImage]",
+      "registryUsername": "[steps('image').registryUsername]",
+      "registryPassword": "[coalesce(steps('image').registryPassword, '')]",
+      "identityProvider": "[steps('identity').identityProvider]",
+      "tenantName": "[steps('identity').tenantName]",
+      "azureAdTenantId": "[if(equals(steps('identity').registrations, 'manual'), steps('identity').azureAdTenantId, '')]",
+      "azureAdClientId": "[if(equals(steps('identity').registrations, 'manual'), steps('identity').azureAdClientId, '')]",
+      "azureAdClientSecret": "[if(equals(steps('identity').registrations, 'manual'), steps('identity').azureAdClientSecret, '')]",
+      "azureAdSignUpSignInPolicyId": "[if(equals(steps('identity').identityProvider, 'AzureAdB2C'), steps('identity').azureAdSignUpSignInPolicyId, '')]",
+      "graphClientId": "[if(and(equals(steps('identity').registrations, 'manual'), equals(steps('graph').useSignInRegistration, 'separate')), steps('graph').graphClientId, '')]",
+      "graphClientSecret": "[if(and(equals(steps('identity').registrations, 'manual'), equals(steps('graph').useSignInRegistration, 'separate')), steps('graph').graphClientSecret, '')]",
+      "ropcClientId": "[if(and(equals(steps('identity').identityProvider, 'AzureAdB2C'), equals(steps('identity').registrations, 'manual')), steps('graph').ropcClientId, '')]",
+      "stepUpClaimType": "[coalesce(steps('options').stepUpClaimType, 'acr')]",
+      "stepUpRequiredClaimValue": "[steps('options').stepUpRequiredClaimValue]",
+      "googleClientId": "[steps('options').googleClientId]",
+      "enableVerificationCodes": "[steps('options').enableVerificationCodes]",
+      "smsSender": "[if(not(steps('options').enableVerificationCodes), '', if(equals(steps('options').smsSenderType, 'number'), steps('options').smsSenderNumber, if(equals(steps('options').smsSenderType, 'alphanumeric'), steps('options').smsSenderId, '')))]",
+      "minReplicas": "[steps('options').minReplicas]",
+      "maxReplicas": "[if(equals(steps('options').enableRedis, 'on'), steps('options').maxReplicas, 1)]",
+      "stepUpB2CPolicy": "[coalesce(steps('options').stepUpB2CPolicy, '')]",
+      "stepUpAuthenticationContextId": "[coalesce(steps('options').stepUpAuthenticationContextId, '')]",
+      "googleClientSecret": "[coalesce(steps('options').googleClientSecret, '')]",
+      "enableRedis": "[equals(steps('options').enableRedis, 'on')]",
+      "signInActivitySource": "[steps('options').signInActivitySource]",
+      "enableMyApps": "[steps('options').enableMyApps]",
+      "myAppsSource": "[if(and(equals(steps('options').enableMyApps, true), equals(steps('identity').identityProvider, 'AzureAdB2C')), steps('options').myAppsSource, 'TokenIssuance')]",
+      "signInRetentionDays": "[if(equals(steps('options').signInActivitySource, 'EventHub'), steps('options').signInRetentionDays, 365)]",
+      "ropcPolicyId": "[if(equals(steps('identity').identityProvider, 'AzureAdB2C'), steps('graph').ropcPolicyId, '')]",
+      "userFlow": "[if(equals(steps('identity').identityProvider, 'EntraExternalId'), coalesce(steps('identity').userFlow, ''), '')]"
+    }
+  }
+}
