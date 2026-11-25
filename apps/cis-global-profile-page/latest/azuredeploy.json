@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "11651770296013438282"
+      "templateHash": "10382980008043953893"
     }
   },
   "parameters": {
@@ -15,7 +15,7 @@
       "minLength": 3,
       "maxLength": 12,
       "metadata": {
-        "description": "Short name used as the prefix of every resource, for example gpp-prod."
+        "description": "Workload name in every resource name, after the Microsoft abbreviation of its type (Cloud Adoption Framework), for example gpp-prod: ca-gpp-prod, cae-gpp-prod, kv-gpp-prod-…"
       }
     },
     "location": {
@@ -232,12 +232,19 @@
         "description": "Secret of the Google OAuth client for account linking."
       }
     },
+    "enableVerificationCodes": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Lets users add an e-mail address as a sign-in method with a one-time code, sent by Azure Communication Services (created only when on). Off: no Communication Services resources, e-mail and SMS verification are turned off, and the Security page does not offer adding these methods."
+      }
+    },
     "smsSender": {
       "type": "string",
       "defaultValue": "",
       "maxLength": 16,
       "metadata": {
-        "description": "SMS sender for verification codes: a phone number bought in Azure Communication Services (E.164, for example +48123456789) or an alphanumeric sender ID enabled in ACS (1-11 letters, digits or spaces, at least one letter). Until it is set, phone verification fails instead of logging codes."
+        "description": "SMS sender for verification codes: a phone number bought in Azure Communication Services (E.164, for example +48123456789) or an alphanumeric sender ID enabled in ACS (1-11 letters, digits or spaces, at least one letter). Until it is set, adding a phone number is not offered."
       }
     },
     "communicationDataLocation": {
@@ -332,7 +339,7 @@
     "identity": {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
-      "name": "[format('{0}-id', parameters('name'))]",
+      "name": "[format('id-{0}', parameters('name'))]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]"
     },
@@ -346,7 +353,7 @@
         "signInAudience": "AzureADMultipleOrgs",
         "web": {
           "redirectUris": [
-            "[format('{0}/setup/callback', format('https://{0}-app.{1}', parameters('name'), reference('environment').defaultDomain))]"
+            "[format('{0}/setup/callback', format('https://ca-{0}.{1}', parameters('name'), reference('environment').defaultDomain))]"
           ]
         }
       },
@@ -375,7 +382,7 @@
     "logs": {
       "type": "Microsoft.OperationalInsights/workspaces",
       "apiVersion": "2023-09-01",
-      "name": "[format('{0}-logs', parameters('name'))]",
+      "name": "[format('log-{0}', parameters('name'))]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]",
       "properties": {
@@ -388,7 +395,7 @@
     "vault": {
       "type": "Microsoft.KeyVault/vaults",
       "apiVersion": "2023-07-01",
-      "name": "[take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)]",
+      "name": "[take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24)]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]",
       "properties": {
@@ -406,8 +413,8 @@
     "vaultSecretsUser": {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]",
-      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').keyVaultSecretsUser)]",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').keyVaultSecretsUser)]",
       "properties": {
         "principalId": "[reference('identity').principalId]",
         "principalType": "ServicePrincipal",
@@ -422,8 +429,8 @@
       "condition": "[variables('useSetup')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24))]",
-      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').keyVaultSecretsOfficer)]",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').keyVaultSecretsOfficer)]",
       "properties": {
         "principalId": "[reference('identity').principalId]",
         "principalType": "ServicePrincipal",
@@ -438,7 +445,7 @@
       "condition": "[variables('useSetup')]",
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2023-07-01",
-      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), 'config--Setup--Code')]",
+      "name": "[format('{0}/{1}', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24), 'config--Setup--Code')]",
       "properties": {
         "value": "[parameters('setupCode')]"
       },
@@ -454,7 +461,7 @@
       "condition": "[not(empty(items(variables('secretValues'))[copyIndex()].value))]",
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2023-07-01",
-      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), items(variables('secretValues'))[copyIndex()].key)]",
+      "name": "[format('{0}/{1}', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24), items(variables('secretValues'))[copyIndex()].key)]",
       "properties": {
         "value": "[items(variables('secretValues'))[copyIndex()].value]"
       },
@@ -466,7 +473,7 @@
       "condition": "[parameters('enableRedis')]",
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2023-07-01",
-      "name": "[format('{0}/{1}', take(format('{0}-kv-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string')]",
+      "name": "[format('{0}/{1}', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string')]",
       "properties": {
         "value": "[format('{0}:10000,password={1},ssl=True,abortConnect=False', reference('redis').hostName, listKeys('redisDatabase', '2025-04-01').primaryKey)]"
       },
@@ -480,7 +487,7 @@
       "condition": "[parameters('enableRedis')]",
       "type": "Microsoft.Cache/redisEnterprise",
       "apiVersion": "2025-04-01",
-      "name": "[format('{0}-redis-{1}', parameters('name'), variables('suffix'))]",
+      "name": "[format('amr-{0}-{1}', parameters('name'), variables('suffix'))]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]",
       "sku": {
@@ -494,7 +501,7 @@
       "condition": "[parameters('enableRedis')]",
       "type": "Microsoft.Cache/redisEnterprise/databases",
       "apiVersion": "2025-04-01",
-      "name": "[format('{0}/{1}', format('{0}-redis-{1}', parameters('name'), variables('suffix')), 'default')]",
+      "name": "[format('{0}/{1}', format('amr-{0}-{1}', parameters('name'), variables('suffix')), 'default')]",
       "properties": {
         "clientProtocol": "Encrypted",
         "port": 10000,
@@ -509,7 +516,7 @@
     "storage": {
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2023-05-01",
-      "name": "[take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)]",
+      "name": "[take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24)]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]",
       "kind": "StorageV2",
@@ -526,7 +533,7 @@
     "blobService": {
       "type": "Microsoft.Storage/storageAccounts/blobServices",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default')]",
+      "name": "[format('{0}/{1}', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default')]",
       "properties": {
         "deleteRetentionPolicy": {
           "enabled": true,
@@ -540,7 +547,7 @@
     "photos": {
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'profile-photos')]",
+      "name": "[format('{0}/{1}/{2}', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default', 'profile-photos')]",
       "properties": {
         "publicAccess": "None"
       },
@@ -551,7 +558,7 @@
     "dataProtectionContainer": {
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'data-protection')]",
+      "name": "[format('{0}/{1}/{2}', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default', 'data-protection')]",
       "properties": {
         "publicAccess": "None"
       },
@@ -562,8 +569,8 @@
     "photoWriter": {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]",
-      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').storageBlobDataContributor)]",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').storageBlobDataContributor)]",
       "properties": {
         "principalId": "[reference('identity').principalId]",
         "principalType": "ServicePrincipal",
@@ -578,7 +585,7 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.EventHub/namespaces",
       "apiVersion": "2024-01-01",
-      "name": "[format('{0}-evh-{1}', parameters('name'), variables('suffix'))]",
+      "name": "[format('evhns-{0}-{1}', parameters('name'), variables('suffix'))]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]",
       "sku": {
@@ -594,7 +601,7 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.EventHub/namespaces/eventhubs",
       "apiVersion": "2024-01-01",
-      "name": "[format('{0}/{1}', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs')]",
+      "name": "[format('{0}/{1}', format('evhns-{0}-{1}', parameters('name'), variables('suffix')), 'signin-logs')]",
       "properties": {
         "partitionCount": 2,
         "messageRetentionInDays": 7
@@ -607,7 +614,7 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
       "apiVersion": "2024-01-01",
-      "name": "[format('{0}/{1}/{2}', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs', 'global-profile-page')]",
+      "name": "[format('{0}/{1}/{2}', format('evhns-{0}-{1}', parameters('name'), variables('suffix')), 'signin-logs', 'global-profile-page')]",
       "dependsOn": [
         "signInLogsHub"
       ]
@@ -616,7 +623,7 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.EventHub/namespaces/authorizationRules",
       "apiVersion": "2024-01-01",
-      "name": "[format('{0}/{1}', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'entra-diagnostic-settings')]",
+      "name": "[format('{0}/{1}', format('evhns-{0}-{1}', parameters('name'), variables('suffix')), 'entra-diagnostic-settings')]",
       "properties": {
         "rights": [
           "Manage",
@@ -632,8 +639,8 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs')]",
-      "name": "[guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'signin-logs'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').eventHubsDataReceiver)]",
+      "scope": "[resourceId('Microsoft.EventHub/namespaces/eventhubs', format('evhns-{0}-{1}', parameters('name'), variables('suffix')), 'signin-logs')]",
+      "name": "[guid(resourceId('Microsoft.EventHub/namespaces/eventhubs', format('evhns-{0}-{1}', parameters('name'), variables('suffix')), 'signin-logs'), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').eventHubsDataReceiver)]",
       "properties": {
         "principalId": "[reference('identity').principalId]",
         "principalType": "ServicePrincipal",
@@ -648,7 +655,7 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.Storage/storageAccounts/tableServices",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default')]",
+      "name": "[format('{0}/{1}', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default')]",
       "dependsOn": [
         "storage"
       ]
@@ -657,7 +664,7 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'SignIns')]",
+      "name": "[format('{0}/{1}/{2}', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default', 'SignIns')]",
       "dependsOn": [
         "tableService"
       ]
@@ -666,7 +673,7 @@
       "condition": "[variables('tokenIssuancesFromEventHub')]",
       "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'TokenIssuances')]",
+      "name": "[format('{0}/{1}/{2}', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default', 'TokenIssuances')]",
       "dependsOn": [
         "tableService"
       ]
@@ -675,7 +682,7 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}/{2}', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24), 'default', 'signin-log-checkpoints')]",
+      "name": "[format('{0}/{1}/{2}', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default', 'signin-log-checkpoints')]",
       "properties": {
         "publicAccess": "None"
       },
@@ -687,8 +694,8 @@
       "condition": "[variables('signInsFromEventHub')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24))]",
-      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', take(format('{0}st{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').storageTableDataContributor)]",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').storageTableDataContributor)]",
       "properties": {
         "principalId": "[reference('identity').principalId]",
         "principalType": "ServicePrincipal",
@@ -700,9 +707,10 @@
       ]
     },
     "emailService": {
+      "condition": "[parameters('enableVerificationCodes')]",
       "type": "Microsoft.Communication/emailServices",
       "apiVersion": "2023-04-01",
-      "name": "[format('{0}-email', parameters('name'))]",
+      "name": "[format('ecs-{0}', parameters('name'))]",
       "location": "global",
       "tags": "[variables('resourceTags')]",
       "properties": {
@@ -710,9 +718,10 @@
       }
     },
     "emailDomain": {
+      "condition": "[parameters('enableVerificationCodes')]",
       "type": "Microsoft.Communication/emailServices/domains",
       "apiVersion": "2023-04-01",
-      "name": "[format('{0}/{1}', format('{0}-email', parameters('name')), 'AzureManagedDomain')]",
+      "name": "[format('{0}/{1}', format('ecs-{0}', parameters('name')), 'AzureManagedDomain')]",
       "location": "global",
       "properties": {
         "domainManagement": "AzureManaged",
@@ -723,15 +732,16 @@
       ]
     },
     "communication": {
+      "condition": "[parameters('enableVerificationCodes')]",
       "type": "Microsoft.Communication/communicationServices",
       "apiVersion": "2023-04-01",
-      "name": "[format('{0}-acs-{1}', parameters('name'), variables('suffix'))]",
+      "name": "[format('acs-{0}-{1}', parameters('name'), variables('suffix'))]",
       "location": "global",
       "tags": "[variables('resourceTags')]",
       "properties": {
         "dataLocation": "[parameters('communicationDataLocation')]",
         "linkedDomains": [
-          "[resourceId('Microsoft.Communication/emailServices/domains', format('{0}-email', parameters('name')), 'AzureManagedDomain')]"
+          "[resourceId('Microsoft.Communication/emailServices/domains', format('ecs-{0}', parameters('name')), 'AzureManagedDomain')]"
         ]
       },
       "dependsOn": [
@@ -739,10 +749,11 @@
       ]
     },
     "communicationSender": {
+      "condition": "[parameters('enableVerificationCodes')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix')))]",
-      "name": "[guid(resourceId('Microsoft.Communication/communicationServices', format('{0}-acs-{1}', parameters('name'), variables('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))), variables('roles').contributor)]",
+      "scope": "[resourceId('Microsoft.Communication/communicationServices', format('acs-{0}-{1}', parameters('name'), variables('suffix')))]",
+      "name": "[guid(resourceId('Microsoft.Communication/communicationServices', format('acs-{0}-{1}', parameters('name'), variables('suffix'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').contributor)]",
       "properties": {
         "principalId": "[reference('identity').principalId]",
         "principalType": "ServicePrincipal",
@@ -756,7 +767,7 @@
     "environment": {
       "type": "Microsoft.App/managedEnvironments",
       "apiVersion": "2024-03-01",
-      "name": "[format('{0}-env', parameters('name'))]",
+      "name": "[format('cae-{0}', parameters('name'))]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]",
       "properties": {
@@ -782,17 +793,17 @@
     "app": {
       "type": "Microsoft.App/containerApps",
       "apiVersion": "2024-03-01",
-      "name": "[format('{0}-app', parameters('name'))]",
+      "name": "[format('ca-{0}', parameters('name'))]",
       "location": "[parameters('location')]",
       "tags": "[variables('resourceTags')]",
       "identity": {
         "type": "UserAssigned",
         "userAssignedIdentities": {
-          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))))]": {}
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))))]": {}
         }
       },
       "properties": {
-        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-env', parameters('name')))]",
+        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', parameters('name')))]",
         "workloadProfileName": "Consumption",
         "configuration": {
           "activeRevisionsMode": "Single",
@@ -803,7 +814,7 @@
             "allowInsecure": false
           },
           "registries": "[if(empty(parameters('registryUsername')), createArray(), createArray(createObject('server', variables('registryServer'), 'username', parameters('registryUsername'), 'passwordSecretRef', 'registry-password')))]",
-          "secrets": "[concat(if(parameters('enableRedis'), createArray(createObject('name', 'redis-connection-string', 'keyVaultUrl', reference('redisSecret').secretUri, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name'))))), createArray()), map(filter(items(variables('secretValues')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'keyVaultUrl', format('{0}secrets/{1}', reference('vault').vaultUri, lambdaVariables('s').key), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('name')))))))]"
+          "secrets": "[concat(if(parameters('enableRedis'), createArray(createObject('name', 'redis-connection-string', 'keyVaultUrl', reference('redisSecret').secretUri, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))))), createArray()), map(filter(items(variables('secretValues')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'keyVaultUrl', format('{0}secrets/{1}', reference('vault').vaultUri, lambdaVariables('s').key), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name')))))))]"
         },
         "template": {
           "containers": [
@@ -814,7 +825,7 @@
                 "cpu": "[json('0.5')]",
                 "memory": "1Gi"
               },
-              "env": "[concat(map(items(union(createObject('ASPNETCORE_ENVIRONMENT', 'Production', 'AZURE_CLIENT_ID', reference('identity').clientId, 'Authentication__Mode', 'Oidc', 'Authentication__StepUp__ClaimType', parameters('stepUpClaimType'), 'Authentication__StepUp__RequiredClaimValue', parameters('stepUpRequiredClaimValue'), 'Authentication__StepUp__B2CPolicy', parameters('stepUpB2CPolicy'), 'Authentication__StepUp__AuthenticationContextId', parameters('stepUpAuthenticationContextId'), 'AzureAd__Instance', variables('resolvedInstance'), 'AzureAd__Domain', variables('resolvedDomain'), 'AzureAd__TenantId', parameters('azureAdTenantId'), 'AzureAd__ClientId', parameters('azureAdClientId'), 'AzureAd__SignUpSignInPolicyId', parameters('azureAdSignUpSignInPolicyId'), 'IdentityProvider__Adapter', parameters('identityProvider'), 'IdentityProvider__TenantId', variables('resolvedGraphTenantId'), 'IdentityProvider__ClientId', if(variables('useSetup'), reference('setupApplication').appId, variables('resolvedGraphClientId')), 'IdentityProvider__RopcTokenEndpoint', variables('resolvedRopcTokenEndpoint'), 'IdentityProvider__RopcClientId', parameters('ropcClientId'), 'Verification__EmailSender', 'Acs', 'Verification__SmsSender', 'Acs', 'Verification__Acs__Endpoint', format('https://{0}', reference('communication').hostName), 'Verification__Acs__EmailSender', format('DoNotReply@{0}', reference('emailDomain').mailFromSenderDomain), 'Verification__Acs__SmsSender', parameters('smsSender'), 'Federation__Google__ClientId', parameters('googleClientId'), 'ProfilePhotos__Store', 'AzureBlob', 'ProfilePhotos__AccountUrl', reference('storage').primaryEndpoints.blob, 'ProfilePhotos__Container', 'profile-photos', 'DataProtection__BlobUri', format('{0}{1}/keys.xml', reference('storage').primaryEndpoints.blob, 'data-protection'), 'SignInActivity__Source', parameters('signInActivitySource'), 'MyApps__Enabled', string(parameters('enableMyApps')), 'MyApps__Source', parameters('myAppsSource')), if(variables('useSetup'), createObject('Setup__Enabled', 'true', 'Setup__Name', parameters('name'), 'Setup__PublicUrl', format('https://{0}-app.{1}', parameters('name'), reference('environment').defaultDomain), 'Setup__TenantName', parameters('tenantName'), 'Setup__ClientId', reference('setupApplication').appId, 'Setup__KeyVaultUri', reference('vault').vaultUri, 'Setup__SignUpSignInPolicyId', if(empty(parameters('azureAdSignUpSignInPolicyId')), 'B2C_1_susi', parameters('azureAdSignUpSignInPolicyId')), 'Setup__RopcPolicyId', if(empty(parameters('ropcPolicyId')), 'B2C_1_ROPC', parameters('ropcPolicyId')), 'Setup__UserFlow', parameters('userFlow'), 'IdentityProvider__ManagedIdentityFederation', 'true'), createObject()), if(variables('signInsFromEventHub'), createObject('SignInActivity__Store', 'AzureTable', 'SignInActivity__RetentionDays', string(parameters('signInRetentionDays')), 'SignInActivity__Table__AccountUrl', reference('storage').primaryEndpoints.table, 'SignInActivity__Table__TableName', 'SignIns', 'SignInActivity__Table__TokenIssuanceTableName', if(variables('tokenIssuancesFromEventHub'), 'TokenIssuances', 'TokenIssuances'), 'SignInActivity__EventHub__FullyQualifiedNamespace', format('{0}.servicebus.windows.net', format('{0}-evh-{1}', parameters('name'), variables('suffix'))), 'SignInActivity__EventHub__EventHubName', 'signin-logs', 'SignInActivity__EventHub__ConsumerGroup', 'global-profile-page', 'SignInActivity__EventHub__CheckpointAccountUrl', reference('storage').primaryEndpoints.blob, 'SignInActivity__EventHub__CheckpointContainer', 'signin-log-checkpoints'), createObject()))), lambda('s', createObject('name', lambdaVariables('s').key, 'value', lambdaVariables('s').value))), map(filter(items(variables('secretSettings')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'secretRef', lambdaVariables('s').value))))]",
+              "env": "[concat(map(items(union(createObject('ASPNETCORE_ENVIRONMENT', 'Production', 'AZURE_CLIENT_ID', reference('identity').clientId, 'Authentication__Mode', 'Oidc', 'Authentication__StepUp__ClaimType', parameters('stepUpClaimType'), 'Authentication__StepUp__RequiredClaimValue', parameters('stepUpRequiredClaimValue'), 'Authentication__StepUp__B2CPolicy', parameters('stepUpB2CPolicy'), 'Authentication__StepUp__AuthenticationContextId', parameters('stepUpAuthenticationContextId'), 'AzureAd__Instance', variables('resolvedInstance'), 'AzureAd__Domain', variables('resolvedDomain'), 'AzureAd__TenantId', parameters('azureAdTenantId'), 'AzureAd__ClientId', parameters('azureAdClientId'), 'AzureAd__SignUpSignInPolicyId', parameters('azureAdSignUpSignInPolicyId'), 'IdentityProvider__Adapter', parameters('identityProvider'), 'IdentityProvider__TenantId', variables('resolvedGraphTenantId'), 'IdentityProvider__ClientId', if(variables('useSetup'), reference('setupApplication').appId, variables('resolvedGraphClientId')), 'IdentityProvider__RopcTokenEndpoint', variables('resolvedRopcTokenEndpoint'), 'IdentityProvider__RopcClientId', parameters('ropcClientId'), 'Verification__EmailSender', if(parameters('enableVerificationCodes'), 'Acs', 'Disabled'), 'Verification__SmsSender', if(and(parameters('enableVerificationCodes'), not(empty(parameters('smsSender')))), 'Acs', 'Disabled'), 'Verification__Acs__Endpoint', if(parameters('enableVerificationCodes'), format('https://{0}', reference('communication').hostName), ''), 'Verification__Acs__EmailSender', if(parameters('enableVerificationCodes'), format('DoNotReply@{0}', reference('emailDomain').mailFromSenderDomain), ''), 'Verification__Acs__SmsSender', parameters('smsSender'), 'Federation__Google__ClientId', parameters('googleClientId'), 'ProfilePhotos__Store', 'AzureBlob', 'ProfilePhotos__AccountUrl', reference('storage').primaryEndpoints.blob, 'ProfilePhotos__Container', 'profile-photos', 'DataProtection__BlobUri', format('{0}{1}/keys.xml', reference('storage').primaryEndpoints.blob, 'data-protection'), 'SignInActivity__Source', parameters('signInActivitySource'), 'MyApps__Enabled', string(parameters('enableMyApps')), 'MyApps__Source', parameters('myAppsSource')), if(variables('useSetup'), createObject('Setup__Enabled', 'true', 'Setup__Name', parameters('name'), 'Setup__PublicUrl', format('https://ca-{0}.{1}', parameters('name'), reference('environment').defaultDomain), 'Setup__TenantName', parameters('tenantName'), 'Setup__ClientId', reference('setupApplication').appId, 'Setup__KeyVaultUri', reference('vault').vaultUri, 'Setup__SignUpSignInPolicyId', if(empty(parameters('azureAdSignUpSignInPolicyId')), 'B2C_1_susi', parameters('azureAdSignUpSignInPolicyId')), 'Setup__RopcPolicyId', if(empty(parameters('ropcPolicyId')), 'B2C_1_ROPC', parameters('ropcPolicyId')), 'Setup__UserFlow', parameters('userFlow'), 'IdentityProvider__ManagedIdentityFederation', 'true'), createObject()), if(variables('signInsFromEventHub'), createObject('SignInActivity__Store', 'AzureTable', 'SignInActivity__RetentionDays', string(parameters('signInRetentionDays')), 'SignInActivity__Table__AccountUrl', reference('storage').primaryEndpoints.table, 'SignInActivity__Table__TableName', 'SignIns', 'SignInActivity__Table__TokenIssuanceTableName', if(variables('tokenIssuancesFromEventHub'), 'TokenIssuances', 'TokenIssuances'), 'SignInActivity__EventHub__FullyQualifiedNamespace', format('{0}.servicebus.windows.net', format('evhns-{0}-{1}', parameters('name'), variables('suffix'))), 'SignInActivity__EventHub__EventHubName', 'signin-logs', 'SignInActivity__EventHub__ConsumerGroup', 'global-profile-page', 'SignInActivity__EventHub__CheckpointAccountUrl', reference('storage').primaryEndpoints.blob, 'SignInActivity__EventHub__CheckpointContainer', 'signin-log-checkpoints'), createObject()))), lambda('s', createObject('name', lambdaVariables('s').key, 'value', lambdaVariables('s').value))), map(filter(items(variables('secretSettings')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'secretRef', lambdaVariables('s').value))))]",
               "probes": [
                 {
                   "type": "Liveness",
@@ -919,9 +930,9 @@
     "emailSender": {
       "type": "string",
       "metadata": {
-        "description": "Sender address of verification e-mails (Azure managed domain)."
+        "description": "Sender address of verification e-mails (Azure managed domain). Empty when enableVerificationCodes is off."
       },
-      "value": "[format('DoNotReply@{0}', reference('emailDomain').mailFromSenderDomain)]"
+      "value": "[if(parameters('enableVerificationCodes'), format('DoNotReply@{0}', reference('emailDomain').mailFromSenderDomain), '')]"
     },
     "identityClientId": {
       "type": "string",
@@ -935,7 +946,7 @@
       "metadata": {
         "description": "Feature flag EventHub only: event hub authorization rule to select in the tenant's Diagnostic settings (category SignInLogs, plus AuditLogs when myAppsSource is TokenIssuance). Empty otherwise."
       },
-      "value": "[if(variables('signInsFromEventHub'), resourceId('Microsoft.EventHub/namespaces/authorizationRules', format('{0}-evh-{1}', parameters('name'), variables('suffix')), 'entra-diagnostic-settings'), '')]"
+      "value": "[if(variables('signInsFromEventHub'), resourceId('Microsoft.EventHub/namespaces/authorizationRules', format('evhns-{0}-{1}', parameters('name'), variables('suffix')), 'entra-diagnostic-settings'), '')]"
     },
     "signInLogsEventHubName": {
       "type": "string",

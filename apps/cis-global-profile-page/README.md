@@ -6,7 +6,7 @@ Self-service account page for users of Azure AD B2C or Entra External ID: profil
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2FcreateUiDefinition.json)
 
-Version **0.3.0** · [all versions](#versions)
+Version **0.4.0** · [all versions](#versions)
 
 ## Overview
 
@@ -112,13 +112,13 @@ What drives the cost: the number of running replicas, Redis, log volume, and ver
 - Ingress is public HTTPS only. Verification codes are sent to users by e-mail and SMS through Communication Services.
 - Nothing is sent to LinkCode. Outside your subscription the app talks only to your identity provider tenant, Google (when linking is on) and the LinkCode registry (image pull).
 
-## Deployment parameters (version 0.3.0)
+## Deployment parameters (version 0.4.0)
 
 The portal form fills these in; the table is for reference and scripted deployments.
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `name` | string | yes |  | Short name used as the prefix of every resource, for example gpp-prod. |
+| `name` | string | yes |  | Workload name in every resource name, after the Microsoft abbreviation of its type (Cloud Adoption Framework), for example gpp-prod: ca-gpp-prod, cae-gpp-prod, kv-gpp-prod-… |
 | `location` | string | no | `[resourceGroup().location]` | Region of the regional resources. Default: the region of the resource group. |
 | `tags` | object | no | `{}` | Extra tags added to every resource, for example the tags a landing zone requires. |
 | `containerImage` | string | yes |  | Full image reference, for example <registry>.azurecr.io/com-cis-global-profile-page:1.2.3. |
@@ -149,7 +149,8 @@ The portal form fills these in; the table is for reference and scripted deployme
 | `stepUpAuthenticationContextId` | string | no | `` | Entra External ID only: Conditional Access authentication context id used for step-up, for example c1. |
 | `googleClientId` | string | no | `` | Google OAuth client for account linking. Empty: linking is off. |
 | `googleClientSecret` | securestring | no |  | Secret of the Google OAuth client for account linking. |
-| `smsSender` | string | no | `` | SMS sender for verification codes: a phone number bought in Azure Communication Services (E.164, for example +48123456789) or an alphanumeric sender ID enabled in ACS (1-11 letters, digits or spaces, at least one letter). Until it is set, phone verification fails instead of logging codes. |
+| `enableVerificationCodes` | bool | no | `true` | Lets users add an e-mail address as a sign-in method with a one-time code, sent by Azure Communication Services (created only when on). Off: no Communication Services resources, e-mail and SMS verification are turned off, and the Security page does not offer adding these methods. |
+| `smsSender` | string | no | `` | SMS sender for verification codes: a phone number bought in Azure Communication Services (E.164, for example +48123456789) or an alphanumeric sender ID enabled in ACS (1-11 letters, digits or spaces, at least one letter). Until it is set, adding a phone number is not offered. |
 | `communicationDataLocation` | string | no | `Europe` | Data location of Azure Communication Services. |
 | `signInActivitySource` | string | no | `IdentityProvider` | Feature flag for the Recent activity page. IdentityProvider: read the tenant sign-in log through Microsoft Graph on demand (short retention). EventHub: create an event hub for the tenant Diagnostic settings and keep sign-ins in the app's own table for signInRetentionDays. |
 | `signInRetentionDays` | int | no | `365` | Days the app keeps sign-ins when signInActivitySource is EventHub. |
@@ -167,7 +168,7 @@ Deployment outputs (Azure portal > resource group > Deployments):
 | `setupUrl` | string | With /setup: open this page, enter setupCode and sign in as an administrator of the identity provider tenant. Empty otherwise. |
 | `setupCode` | string | With /setup: the one-time code the setup page asks for. Empty otherwise. |
 | `setupClientId` | string | With /setup: client id of the app's multitenant registration in this subscription's tenant (its Microsoft Graph identity). Empty otherwise. |
-| `emailSender` | string | Sender address of verification e-mails (Azure managed domain). |
+| `emailSender` | string | Sender address of verification e-mails (Azure managed domain). Empty when enableVerificationCodes is off. |
 | `identityClientId` | string | Client id of the managed identity of the app. |
 | `signInLogsAuthorizationRuleId` | string | Feature flag EventHub only: event hub authorization rule to select in the tenant's Diagnostic settings (category SignInLogs, plus AuditLogs when myAppsSource is TokenIssuance). Empty otherwise. |
 | `signInLogsEventHubName` | string | Feature flag EventHub only: event hub name to select in the tenant's Diagnostic settings. Empty otherwise. |
@@ -181,5 +182,6 @@ Deployment outputs (Azure portal > resource group > Deployments):
 
 | Version | Deploy | Files | Release notes |
 |---|---|---|---|
+| 0.4.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.4.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.4.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.4.0/azuredeploy.json), [createUiDefinition.json](0.4.0/createUiDefinition.json) |  |
 | 0.3.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.3.0/azuredeploy.json), [createUiDefinition.json](0.3.0/createUiDefinition.json) |  |
 | 0.2.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.2.0/azuredeploy.json), [createUiDefinition.json](0.2.0/createUiDefinition.json) |  |

@@ -20,14 +20,14 @@
       {
         "name": "name",
         "type": "Microsoft.Common.TextBox",
-        "label": "Name prefix",
+        "label": "Workload name",
         "constraints": {
           "required": true,
           "regex": "^[a-z0-9][a-z0-9-]{1,10}[a-z0-9]$",
           "validationMessage": "Use 3 to 12 lowercase letters, digits or hyphens, not starting or ending with a hyphen."
         },
         "defaultValue": "gpp",
-        "toolTip": "Prefix of every resource name, 3 to 12 lowercase letters, digits or hyphens."
+        "toolTip": "Used in every resource name after the Microsoft abbreviation of its type (ca-, cae-, kv-, st, id-, log-...). 3 to 12 lowercase letters, digits or hyphens."
       }
     ],
     "steps": [
@@ -53,7 +53,7 @@
               "validationMessage": "Enter a full image reference: registry/repository:tag."
             },
             "toolTip": "Change it only to deploy another version or registry.",
-            "defaultValue": "acrlinkcodedemo.azurecr.io/com-cis-global-profile-page:0.3.0"
+            "defaultValue": "acrlinkcodedemo.azurecr.io/com-cis-global-profile-page:0.4.0"
           },
           {
             "name": "registryUsername",
@@ -354,7 +354,28 @@
             "visible": "[not(empty(steps('options').googleClientId))]"
           },
           {
+            "name": "enableVerificationCodes",
+            "type": "Microsoft.Common.OptionsGroup",
+            "label": "Add e-mail or phone with a code",
+            "defaultValue": "On",
+            "toolTip": "Lets users add an e-mail address (and, with an SMS sender, a phone number) as a sign-in method after confirming a one-time code. The codes are sent by Azure Communication Services, which the deployment creates. Off: no Communication Services resources, and the Security page does not offer adding these methods. Sign-in, sign-up and password reset e-mails are sent by the identity provider and are not affected.",
+            "constraints": {
+              "allowedValues": [
+                {
+                  "label": "On",
+                  "value": true
+                },
+                {
+                  "label": "Off",
+                  "value": false
+                }
+              ],
+              "required": true
+            }
+          },
+          {
             "name": "smsSenderType",
+            "visible": "[steps('options').enableVerificationCodes]",
             "type": "Microsoft.Common.OptionsGroup",
             "label": "SMS sender",
             "defaultValue": "None (set later)",
@@ -387,7 +408,7 @@
               "validationMessage": "Enter a number in E.164 format, for example +48123456789."
             },
             "toolTip": "Phone number bought in Azure Communication Services.",
-            "visible": "[equals(steps('options').smsSenderType, 'number')]"
+            "visible": "[and(steps('options').enableVerificationCodes, equals(steps('options').smsSenderType, 'number'))]"
           },
           {
             "name": "smsSenderId",
@@ -399,7 +420,7 @@
               "validationMessage": "Use 1-11 letters, digits or spaces, with at least one letter, for example CIS."
             },
             "toolTip": "Alphanumeric sender ID enabled in Azure Communication Services (Phone numbers, Alphanumeric sender ID).",
-            "visible": "[equals(steps('options').smsSenderType, 'alphanumeric')]"
+            "visible": "[and(steps('options').enableVerificationCodes, equals(steps('options').smsSenderType, 'alphanumeric'))]"
           },
           {
             "name": "signInActivitySource",
@@ -533,7 +554,8 @@
       "stepUpClaimType": "[coalesce(steps('options').stepUpClaimType, 'acr')]",
       "stepUpRequiredClaimValue": "[steps('options').stepUpRequiredClaimValue]",
       "googleClientId": "[steps('options').googleClientId]",
-      "smsSender": "[if(equals(steps('options').smsSenderType, 'number'), steps('options').smsSenderNumber, if(equals(steps('options').smsSenderType, 'alphanumeric'), steps('options').smsSenderId, ''))]",
+      "enableVerificationCodes": "[steps('options').enableVerificationCodes]",
+      "smsSender": "[if(not(steps('options').enableVerificationCodes), '', if(equals(steps('options').smsSenderType, 'number'), steps('options').smsSenderNumber, if(equals(steps('options').smsSenderType, 'alphanumeric'), steps('options').smsSenderId, '')))]",
       "minReplicas": "[steps('options').minReplicas]",
       "maxReplicas": "[if(equals(steps('options').enableRedis, 'on'), steps('options').maxReplicas, 1)]",
       "stepUpB2CPolicy": "[coalesce(steps('options').stepUpB2CPolicy, '')]",
