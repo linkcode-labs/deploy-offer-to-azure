@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.48.1.52935",
-      "templateHash": "10309877219375858659"
+      "templateHash": "7272817976686782385"
     }
   },
   "parameters": {
@@ -34,21 +34,21 @@
     "containerImage": {
       "type": "string",
       "metadata": {
-        "description": "Full image reference, for example <registry>.azurecr.io/com-cis-global-profile-page:1.2.3."
+        "description": "Released image to copy into this deployment's own registry, for example <registry>.azurecr.io/com-cis-global-profile-page:1.2.3. The app then pulls it from its own registry with its managed identity."
       }
     },
     "registryUsername": {
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "User name of the registry token given to this customer. Empty: the image is public and pulled anonymously."
+        "description": "Name of the registry token LinkCode gave for this deployment. It is used once, to copy the image during the deployment, and is not stored. Empty: the source image is public."
       }
     },
     "registryPassword": {
       "type": "securestring",
       "defaultValue": "",
       "metadata": {
-        "description": "Password of the registry token given to this customer."
+        "description": "Password of that registry token. Used once during the deployment, not stored."
       }
     },
     "minReplicas": {
@@ -302,12 +302,13 @@
   "variables": {
     "suffix": "[uniqueString(resourceGroup().id, parameters('name'))]",
     "resourceTags": "[union(createObject('application', 'global-profile-page', 'environment', parameters('name')), parameters('tags'))]",
-    "registryServer": "[split(parameters('containerImage'), '/')[0]]",
+    "imageName": "[last(split(parameters('containerImage'), '/'))]",
     "roles": {
       "keyVaultSecretsUser": "4633458b-17de-408a-b874-0445c86b69e6",
       "keyVaultSecretsOfficer": "b86a8fe4-44ce-4948-aee5-eccb2c155cd7",
       "storageBlobDataContributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
       "contributor": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+      "acrPull": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
       "storageTableDataContributor": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
       "eventHubsDataReceiver": "a638d3c7-ab3a-418d-83e6-5f17a39d4fde"
     },
@@ -325,8 +326,7 @@
     "secretValues": {
       "azure-ad-client-secret": "[parameters('azureAdClientSecret')]",
       "graph-client-secret": "[if(variables('graphUsesSignInRegistration'), '', parameters('graphClientSecret'))]",
-      "google-client-secret": "[parameters('googleClientSecret')]",
-      "registry-password": "[parameters('registryPassword')]"
+      "google-client-secret": "[parameters('googleClientSecret')]"
     },
     "secretSettings": {
       "Cache__Redis__ConnectionString": "[if(parameters('enableRedis'), 'redis-connection-string', '')]",
@@ -355,6 +355,105 @@
         },
         "retentionInDays": 30
       }
+    },
+    {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-07-01",
+      "name": "[take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "adminUserEnabled": false
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').acrPull)]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').acrPull)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name')))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('id-{0}-import', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-import', parameters('name'))), variables('roles').contributor)]",
+      "properties": {
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-import', parameters('name'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').contributor)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-import', parameters('name')))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2023-08-01",
+      "name": "[format('import-image-{0}', parameters('name'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('resourceTags')]",
+      "kind": "AzureCLI",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-import', parameters('name'))))]": {}
+        }
+      },
+      "properties": {
+        "azCliVersion": "2.67.0",
+        "forceUpdateTag": "[parameters('containerImage')]",
+        "retentionInterval": "PT1H",
+        "cleanupPreference": "Always",
+        "timeout": "PT30M",
+        "environmentVariables": [
+          {
+            "name": "REGISTRY",
+            "value": "[take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)]"
+          },
+          {
+            "name": "SOURCE",
+            "value": "[parameters('containerImage')]"
+          },
+          {
+            "name": "TARGET",
+            "value": "[variables('imageName')]"
+          },
+          {
+            "name": "SOURCE_USERNAME",
+            "value": "[parameters('registryUsername')]"
+          },
+          {
+            "name": "SOURCE_PASSWORD",
+            "secureValue": "[parameters('registryPassword')]"
+          }
+        ],
+        "scriptContent": "set -eu\r\nfor attempt in 1 2 3 4 5 6; do\r\n  if [ -n \"$SOURCE_USERNAME\" ]; then\r\n    az acr import --name \"$REGISTRY\" --source \"$SOURCE\" --image \"$TARGET\" --username \"$SOURCE_USERNAME\" --password \"$SOURCE_PASSWORD\" --force && exit 0\r\n  else\r\n    az acr import --name \"$REGISTRY\" --source \"$SOURCE\" --image \"$TARGET\" --force && exit 0\r\n  fi\r\n  echo \"Import attempt $attempt failed, retrying in 30 s.\"\r\n  sleep 30\r\ndone\r\necho \"Could not copy $SOURCE into $REGISTRY. Check the registry token name and password, and that it is not expired.\" >&2\r\nexit 1\r\n"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-import', parameters('name')))]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50))]",
+        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}-import', parameters('name'))), variables('roles').contributor))]"
+      ]
     },
     {
       "type": "Microsoft.KeyVault/vaults",
@@ -777,14 +876,19 @@
             "transport": "auto",
             "allowInsecure": false
           },
-          "registries": "[if(empty(parameters('registryUsername')), createArray(), createArray(createObject('server', variables('registryServer'), 'username', parameters('registryUsername'), 'passwordSecretRef', 'registry-password')))]",
+          "registries": [
+            {
+              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), '2023-07-01').loginServer]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name')))]"
+            }
+          ],
           "secrets": "[concat(if(parameters('enableRedis'), createArray(createObject('name', 'redis-connection-string', 'keyVaultUrl', reference(resourceId('Microsoft.KeyVault/vaults/secrets', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string'), '2023-07-01').secretUri, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))))), createArray()), map(filter(items(variables('secretValues')), lambda('s', not(empty(lambdaVariables('s').value)))), lambda('s', createObject('name', lambdaVariables('s').key, 'keyVaultUrl', format('{0}secrets/{1}', reference(resourceId('Microsoft.KeyVault/vaults', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24)), '2023-07-01').vaultUri, lambdaVariables('s').key), 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name')))))))]"
         },
         "template": {
           "containers": [
             {
               "name": "web",
-              "image": "[parameters('containerImage')]",
+              "image": "[format('{0}/{1}', reference(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), '2023-07-01').loginServer, variables('imageName'))]",
               "resources": {
                 "cpu": "[json('0.5')]",
                 "memory": "1Gi"
@@ -834,9 +938,12 @@
         "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', parameters('name')))]",
         "[resourceId('Microsoft.EventHub/namespaces', format('evhns-{0}-{1}', parameters('name'), variables('suffix')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name')))]",
+        "[resourceId('Microsoft.Resources/deploymentScripts', format('import-image-{0}', parameters('name')))]",
         "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default', 'profile-photos')]",
         "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24)), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').storageBlobDataContributor))]",
         "[resourceId('Microsoft.KeyVault/vaults/secrets', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24), 'redis-connection-string')]",
+        "[resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50))]",
+        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', parameters('name'))), variables('roles').acrPull))]",
         "secrets",
         "[resourceId('Microsoft.KeyVault/vaults/secrets', take(format('kv-{0}-{1}', parameters('name'), variables('suffix')), 24), 'config--Setup--Code')]",
         "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', take(format('st{0}{1}', variables('compactName'), variables('suffix')), 24), 'default', 'signin-log-checkpoints')]",
@@ -888,6 +995,13 @@
         "description": "Sender address of verification e-mails (Azure managed domain). Empty when enableVerificationCodes is off."
       },
       "value": "[if(parameters('enableVerificationCodes'), format('DoNotReply@{0}', reference(resourceId('Microsoft.Communication/emailServices/domains', format('ecs-{0}', parameters('name')), 'AzureManagedDomain'), '2023-04-01').mailFromSenderDomain), '')]"
+    },
+    "registryName": {
+      "type": "string",
+      "metadata": {
+        "description": "This deployment's own container registry, which holds the app's image."
+      },
+      "value": "[take(format('cr{0}{1}', variables('compactName'), variables('suffix')), 50)]"
     },
     "identityClientId": {
       "type": "string",
