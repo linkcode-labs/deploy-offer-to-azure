@@ -53,7 +53,7 @@
               "validationMessage": "Enter a full image reference: registry/repository:tag."
             },
             "toolTip": "Change it only to deploy another version or registry.",
-            "defaultValue": "acrlinkcodedemo.azurecr.io/com-cis-global-profile-page:0.4.0"
+            "defaultValue": "acrlinkcodedemo.azurecr.io/com-cis-global-profile-page:0.5.0"
           },
           {
             "name": "registryUsername",
@@ -119,7 +119,7 @@
             "type": "Microsoft.Common.OptionsGroup",
             "label": "App registrations",
             "defaultValue": "Created by /setup after the deployment (recommended)",
-            "toolTip": "Recommended: after the deployment a tenant administrator opens the setupUrl output, enters setupCode and signs in once; the app creates its registrations, permissions and the B2C ROPC flow itself, and calls Microsoft Graph with its managed identity (no Graph secret). The deployment needs permission to create an app registration in this subscription's tenant.",
+            "toolTip": "Recommended: after the deployment a tenant administrator opens the setupUrl output, enters setupCode and signs in once with a short code (LinkCode setup app); the app creates its registrations, permissions and the B2C ROPC flow itself and keeps their secrets in Key Vault.",
             "constraints": {
               "allowedValues": [
                 {
@@ -141,7 +141,7 @@
             "visible": "[equals(steps('identity').registrations, 'setup')]",
             "options": {
               "icon": "Info",
-              "text": "After the deployment, open the setupUrl output and enter setupCode. Sign in there as a Global Administrator of the B2C or External ID tenant; setup takes about two minutes and restarts the app."
+              "text": "After the deployment, open the setupUrl output and enter setupCode. Sign in there with the short code it shows, as a Global Administrator of the B2C or External ID tenant, and accept the permissions of LinkCode setup; setup takes about two minutes and restarts the app."
             }
           },
           {
