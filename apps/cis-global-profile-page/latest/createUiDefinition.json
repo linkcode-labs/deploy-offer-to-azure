@@ -40,7 +40,7 @@
             "type": "Microsoft.Common.InfoBox",
             "options": {
               "icon": "Info",
-              "text": "The image of this version is filled in. Enter the registry token you received from LinkCode."
+              "text": "The image of this version is filled in. Enter the registry token name and password you received from LinkCode. They are used once, to copy the image into a registry the deployment creates for you, and are not stored."
             }
           },
           {
@@ -52,17 +52,19 @@
               "regex": "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+|@sha256:[a-f0-9]{64})$",
               "validationMessage": "Enter a full image reference: registry/repository:tag."
             },
-            "toolTip": "Change it only to deploy another version or registry.",
-            "defaultValue": "acrlinkcodedemo.azurecr.io/com-cis-global-profile-page:0.4.0"
+            "toolTip": "Change it only to deploy another version. The image is copied into this deployment's own registry.",
+            "defaultValue": "acrlinkcodedemo.azurecr.io/com-cis-global-profile-page:0.6.0"
           },
           {
             "name": "registryUsername",
             "type": "Microsoft.Common.TextBox",
             "label": "Registry token name",
             "constraints": {
-              "required": false
+              "required": false,
+              "regex": "^[A-Za-z0-9-]{5,50}$",
+              "validationMessage": "The token name, for example contoso-prod: 5 to 50 letters, digits or hyphens. The password goes in the next field."
             },
-            "toolTip": "Empty only for a public image."
+            "toolTip": "The short token name from LinkCode, not the password. Empty only for a public image."
           },
           {
             "name": "registryPassword",
@@ -76,7 +78,7 @@
             "constraints": {
               "required": false
             },
-            "visible": "[not(empty(steps('image').registryUsername))]"
+            "toolTip": "The long token password from LinkCode."
           }
         ]
       },
@@ -119,7 +121,7 @@
             "type": "Microsoft.Common.OptionsGroup",
             "label": "App registrations",
             "defaultValue": "Created by /setup after the deployment (recommended)",
-            "toolTip": "Recommended: after the deployment a tenant administrator opens the setupUrl output, enters setupCode and signs in once; the app creates its registrations, permissions and the B2C ROPC flow itself, and calls Microsoft Graph with its managed identity (no Graph secret). The deployment needs permission to create an app registration in this subscription's tenant.",
+            "toolTip": "Recommended: after the deployment a tenant administrator opens the setupUrl output, enters setupCode and signs in once with a short code (LinkCode setup app); the app creates its registrations, permissions and the B2C ROPC flow itself and keeps their secrets in Key Vault.",
             "constraints": {
               "allowedValues": [
                 {
@@ -141,7 +143,7 @@
             "visible": "[equals(steps('identity').registrations, 'setup')]",
             "options": {
               "icon": "Info",
-              "text": "After the deployment, open the setupUrl output and enter setupCode. Sign in there as a Global Administrator of the B2C or External ID tenant; setup takes about two minutes and restarts the app."
+              "text": "After the deployment, open the setupUrl output and enter setupCode. Sign in there with the short code it shows, as a Global Administrator of the B2C or External ID tenant, and accept the permissions of LinkCode setup; setup takes about two minutes and restarts the app."
             }
           },
           {

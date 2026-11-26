@@ -6,7 +6,7 @@ Self-service account page for users of Azure AD B2C or Entra External ID: profil
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2Flatest%2FcreateUiDefinition.json)
 
-Version **0.4.0** · [all versions](#versions)
+Version **0.6.0** · [all versions](#versions)
 
 ## Overview
 
@@ -33,7 +33,7 @@ Users open the app over HTTPS and sign in with OpenID Connect against your Azure
 
 Profile changes, sign-in methods and sign-in activity are read and written in your identity provider tenant through Microsoft Graph, with the app registration you create. Profile photos and the keys that protect sign-in cookies are stored in a Storage account. Verification codes are sent by e-mail and SMS through Azure Communication Services (e-mail from an Azure managed domain). With Redis on, verification codes and token caches live in Azure Managed Redis so the app can run more than one replica; with Redis off the app runs as one replica with in-memory caches.
 
-The app reaches Key Vault, Storage and Communication Services with its managed identity; client secrets and the registry token are kept in Key Vault. Logs go to a Log Analytics workspace. Outside the resource group the app talks only to your identity provider tenant, to Google when account linking is on, and to the LinkCode registry to pull its image.
+The app reaches its container registry, Key Vault, Storage and Communication Services with its managed identity; client secrets are kept in Key Vault. Logs go to a Log Analytics workspace. Outside the resource group the app talks only to your identity provider tenant, to Google when account linking is on, and, once during the deployment, to the LinkCode registry to copy its image into your own registry.
 
 ```mermaid
 %% Architecture of Global Profile Page as deployed into the customer's subscription by deploy/azure/main.bicep.
@@ -46,6 +46,7 @@ flowchart LR
       app["Global Profile Page<br/>container app<br/>(web app + API)"]
     end
     id["Managed identity"]
+    cr[("Container registry<br/>app image")]
     kv[("Key Vault<br/>secrets")]
     st[("Storage account<br/>profile photos, cookie keys")]
     redis[("Azure Managed Redis<br/>optional")]
@@ -66,7 +67,8 @@ flowchart LR
   app -->|OpenID Connect sign-in, Microsoft Graph| idp
   app -.OAuth.-> google
   env -->|logs| logs
-  acr -->|image pull with token| app
+  acr -->|image copy once at deployment, short-lived token| cr
+  cr -->|image pull via identity| app
 ```
 
 ### Resources created in your subscription
@@ -75,8 +77,10 @@ flowchart LR
 |---|---|---|---|
 | Container Apps environment | `Microsoft.App/managedEnvironments` | Hosts the application container | Consumption |
 | Global Profile Page | `Microsoft.App/containerApps` | Web interface, sign-in and API in one container | 0.5 vCPU, 1 GiB, 0-30 replicas (1 without Redis) |
-| Managed identity | `Microsoft.ManagedIdentity/userAssignedIdentities` | Identity of the app for Key Vault, Storage and Communication Services |  |
-| Key Vault | `Microsoft.KeyVault/vaults` | Client secrets, registry token and the Redis connection string | Standard, RBAC, purge protection |
+| Container registry | `Microsoft.ContainerRegistry/registries` | The application image, copied from LinkCode during the deployment | Basic |
+| Managed identity | `Microsoft.ManagedIdentity/userAssignedIdentities` | Identity of the app for its registry, Key Vault, Storage and Communication Services |  |
+| Deployment script | `Microsoft.Resources/deploymentScripts` | Copies the image into the registry (temporary container instance, removed after the run) |  |
+| Key Vault | `Microsoft.KeyVault/vaults` | Client secrets and the Redis connection string | Standard, RBAC, purge protection |
 | Storage account | `Microsoft.Storage/storageAccounts` | Profile photos and sign-in cookie protection keys | Standard ZRS, no shared keys |
 | Communication Services | `Microsoft.Communication/communicationServices` | Sends verification codes by e-mail and SMS |  |
 | Email Communication Service and Azure managed domain | `Microsoft.Communication/emailServices` | Sender domain of verification e-mails |  |
@@ -92,7 +96,7 @@ flowchart LR
 - Azure AD B2C only: a sign-up/sign-in user flow or custom policy and a ROPC user flow for password checks
 - For SMS codes: a phone number or an alphanumeric sender ID in Azure Communication Services (can be added after deployment)
 - Optional: a Google OAuth client for account linking
-- Image reference and registry token from LinkCode
+- Image reference and a short-lived registry token from LinkCode (used once, to copy the image)
 
 ## Cost
 
@@ -107,12 +111,12 @@ What drives the cost: the number of running replicas, Redis, log volume, and ver
 
 - All resources and data stay in your subscription and the region you choose; Communication Services keeps its data in the data location you choose (Europe by default).
 - User data is read from and written to your own identity provider tenant through Microsoft Graph; the app keeps no user database. Profile photos are stored in your Storage account.
-- Client secrets and the registry token are stored in Key Vault and read by the app's managed identity; the Storage account has shared keys and public blob access turned off.
+- Client secrets are stored in Key Vault and read by the app's managed identity; the registry token is used once to copy the image and is not stored; the Storage account has shared keys and public blob access turned off.
 - Sign-in uses OpenID Connect; tokens stay on the server and the browser holds only an encrypted, HTTP-only session cookie.
 - Ingress is public HTTPS only. Verification codes are sent to users by e-mail and SMS through Communication Services.
-- Nothing is sent to LinkCode. Outside your subscription the app talks only to your identity provider tenant, Google (when linking is on) and the LinkCode registry (image pull).
+- Nothing is sent to LinkCode. Outside your subscription the app talks only to your identity provider tenant, Google (when linking is on) and, during the deployment only, the LinkCode registry (image copy).
 
-## Deployment parameters (version 0.4.0)
+## Deployment parameters (version 0.6.0)
 
 The portal form fills these in; the table is for reference and scripted deployments.
 
@@ -121,9 +125,9 @@ The portal form fills these in; the table is for reference and scripted deployme
 | `name` | string | yes |  | Workload name in every resource name, after the Microsoft abbreviation of its type (Cloud Adoption Framework), for example gpp-prod: ca-gpp-prod, cae-gpp-prod, kv-gpp-prod-… |
 | `location` | string | no | `[resourceGroup().location]` | Region of the regional resources. Default: the region of the resource group. |
 | `tags` | object | no | `{}` | Extra tags added to every resource, for example the tags a landing zone requires. |
-| `containerImage` | string | yes |  | Full image reference, for example <registry>.azurecr.io/com-cis-global-profile-page:1.2.3. |
-| `registryUsername` | string | no | `` | User name of the registry token given to this customer. Empty: the image is public and pulled anonymously. |
-| `registryPassword` | securestring | no |  | Password of the registry token given to this customer. |
+| `containerImage` | string | yes |  | Released image to copy into this deployment's own registry, for example <registry>.azurecr.io/com-cis-global-profile-page:1.2.3. The app then pulls it from its own registry with its managed identity. |
+| `registryUsername` | string | no | `` | Name of the registry token LinkCode gave for this deployment. It is used once, to copy the image during the deployment, and is not stored. Empty: the source image is public. |
+| `registryPassword` | securestring | no |  | Password of that registry token. Used once during the deployment, not stored. |
 | `minReplicas` | int | no | `1` | 0 scales to zero when idle: cheapest, with a cold start of a few seconds on the next request. |
 | `maxReplicas` | int | no | `5` | Ignored without Redis: verification codes and token caches then live in memory, so the app runs as one replica. |
 | `enableRedis` | bool | no | `true` | Azure Managed Redis for verification codes and token caches shared by replicas. Off: one replica, in-memory caches; after a restart or scale to zero, pending codes are lost and some changes may ask the user to sign in again. |
@@ -132,7 +136,8 @@ The portal form fills these in; the table is for reference and scripted deployme
 | `azureAdInstance` | string | no | `` | Sign-in authority host, for example https://contoso.ciamlogin.com/ or https://contoso.b2clogin.com/. Empty: derived from tenantName. |
 | `azureAdDomain` | string | no | `` | Tenant domain, for example contoso.onmicrosoft.com. Empty: derived from tenantName. |
 | `azureAdTenantId` | string | no | `` | Tenant id (GUID) of the identity provider tenant used for sign-in. Empty with /setup, which finds it. |
-| `azureAdClientId` | string | no | `` | Client id of the web sign-in app registration. Empty (recommended): the deployment creates the app's own multitenant registration, and a tenant administrator runs /setup once (outputs setupUrl and setupCode), which creates the registrations in the identity provider tenant and saves their settings in Key Vault. |
+| `azureAdClientId` | string | no | `` | Client id of the web sign-in app registration. Empty (recommended): a tenant administrator runs /setup once after the deployment (outputs setupUrl and setupCode), which creates the registrations in the identity provider tenant and saves their settings in Key Vault. |
+| `setupClientId` | string | no | `84c2471e-fef9-4ca6-a089-92ec14682fe0` | Client id of the LinkCode setup app: a multitenant public client that /setup signs the tenant administrator in to with a device code. Keep the default. |
 | `azureAdSignUpSignInPolicyId` | string | no | `` | B2C only: sign-up/sign-in user flow or custom policy. Empty for Entra External ID. |
 | `azureAdClientSecret` | securestring | no |  | Client secret of the web sign-in app registration. Empty with /setup. |
 | `graphTenantId` | string | no | `` | Tenant of the app registration that calls Microsoft Graph in the identity provider tenant. Empty: azureAdTenantId. |
@@ -167,8 +172,8 @@ Deployment outputs (Azure portal > resource group > Deployments):
 | `signInRedirectUri` | string | Without /setup: add this redirect URI to the web sign-in app registration (Authentication > Web), then sign in at appUrl. |
 | `setupUrl` | string | With /setup: open this page, enter setupCode and sign in as an administrator of the identity provider tenant. Empty otherwise. |
 | `setupCode` | string | With /setup: the one-time code the setup page asks for. Empty otherwise. |
-| `setupClientId` | string | With /setup: client id of the app's multitenant registration in this subscription's tenant (its Microsoft Graph identity). Empty otherwise. |
 | `emailSender` | string | Sender address of verification e-mails (Azure managed domain). Empty when enableVerificationCodes is off. |
+| `registryName` | string | This deployment's own container registry, which holds the app's image. |
 | `identityClientId` | string | Client id of the managed identity of the app. |
 | `signInLogsAuthorizationRuleId` | string | Feature flag EventHub only: event hub authorization rule to select in the tenant's Diagnostic settings (category SignInLogs, plus AuditLogs when myAppsSource is TokenIssuance). Empty otherwise. |
 | `signInLogsEventHubName` | string | Feature flag EventHub only: event hub name to select in the tenant's Diagnostic settings. Empty otherwise. |
@@ -182,6 +187,7 @@ Deployment outputs (Azure portal > resource group > Deployments):
 
 | Version | Deploy | Files | Release notes |
 |---|---|---|---|
+| 0.6.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.6.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.6.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.6.0/azuredeploy.json), [createUiDefinition.json](0.6.0/createUiDefinition.json) |  |
 | 0.4.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.4.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.4.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.4.0/azuredeploy.json), [createUiDefinition.json](0.4.0/createUiDefinition.json) |  |
 | 0.3.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.3.0/azuredeploy.json), [createUiDefinition.json](0.3.0/createUiDefinition.json) |  |
 | 0.2.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.2.0/azuredeploy.json), [createUiDefinition.json](0.2.0/createUiDefinition.json) |  |
