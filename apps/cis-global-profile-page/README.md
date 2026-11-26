@@ -33,7 +33,7 @@ Users open the app over HTTPS and sign in with OpenID Connect against your Azure
 
 Profile changes, sign-in methods and sign-in activity are read and written in your identity provider tenant through Microsoft Graph, with the app registration you create. Profile photos and the keys that protect sign-in cookies are stored in a Storage account. Verification codes are sent by e-mail and SMS through Azure Communication Services (e-mail from an Azure managed domain). With Redis on, verification codes and token caches live in Azure Managed Redis so the app can run more than one replica; with Redis off the app runs as one replica with in-memory caches.
 
-The app reaches its container registry, Key Vault, Storage and Communication Services with its managed identity; client secrets are kept in Key Vault. Logs go to a Log Analytics workspace. Outside the resource group the app talks only to your identity provider tenant, to Google when account linking is on, and, once during the deployment, to the LinkCode registry to copy its image into your own registry.
+The app reaches Key Vault, Storage and Communication Services with its managed identity; client secrets and the registry token are kept in Key Vault. Logs go to a Log Analytics workspace. Outside the resource group the app talks only to your identity provider tenant, to Google when account linking is on, and to the LinkCode registry to pull its image.
 
 ```mermaid
 %% Architecture of Global Profile Page as deployed into the customer's subscription by deploy/azure/main.bicep.
@@ -46,7 +46,6 @@ flowchart LR
       app["Global Profile Page<br/>container app<br/>(web app + API)"]
     end
     id["Managed identity"]
-    cr[("Container registry<br/>app image")]
     kv[("Key Vault<br/>secrets")]
     st[("Storage account<br/>profile photos, cookie keys")]
     redis[("Azure Managed Redis<br/>optional")]
@@ -67,8 +66,7 @@ flowchart LR
   app -->|OpenID Connect sign-in, Microsoft Graph| idp
   app -.OAuth.-> google
   env -->|logs| logs
-  acr -->|image copy once at deployment, short-lived token| cr
-  cr -->|image pull via identity| app
+  acr -->|image pull with token| app
 ```
 
 ### Resources created in your subscription
@@ -77,10 +75,8 @@ flowchart LR
 |---|---|---|---|
 | Container Apps environment | `Microsoft.App/managedEnvironments` | Hosts the application container | Consumption |
 | Global Profile Page | `Microsoft.App/containerApps` | Web interface, sign-in and API in one container | 0.5 vCPU, 1 GiB, 0-30 replicas (1 without Redis) |
-| Container registry | `Microsoft.ContainerRegistry/registries` | The application image, copied from LinkCode during the deployment | Basic |
-| Managed identity | `Microsoft.ManagedIdentity/userAssignedIdentities` | Identity of the app for its registry, Key Vault, Storage and Communication Services |  |
-| Deployment script | `Microsoft.Resources/deploymentScripts` | Copies the image into the registry (temporary container instance, removed after the run) |  |
-| Key Vault | `Microsoft.KeyVault/vaults` | Client secrets and the Redis connection string | Standard, RBAC, purge protection |
+| Managed identity | `Microsoft.ManagedIdentity/userAssignedIdentities` | Identity of the app for Key Vault, Storage and Communication Services |  |
+| Key Vault | `Microsoft.KeyVault/vaults` | Client secrets, registry token and the Redis connection string | Standard, RBAC, purge protection |
 | Storage account | `Microsoft.Storage/storageAccounts` | Profile photos and sign-in cookie protection keys | Standard ZRS, no shared keys |
 | Communication Services | `Microsoft.Communication/communicationServices` | Sends verification codes by e-mail and SMS |  |
 | Email Communication Service and Azure managed domain | `Microsoft.Communication/emailServices` | Sender domain of verification e-mails |  |
@@ -96,7 +92,7 @@ flowchart LR
 - Azure AD B2C only: a sign-up/sign-in user flow or custom policy and a ROPC user flow for password checks
 - For SMS codes: a phone number or an alphanumeric sender ID in Azure Communication Services (can be added after deployment)
 - Optional: a Google OAuth client for account linking
-- Image reference and a short-lived registry token from LinkCode (used once, to copy the image)
+- Image reference and registry token from LinkCode
 
 ## Cost
 
@@ -111,10 +107,10 @@ What drives the cost: the number of running replicas, Redis, log volume, and ver
 
 - All resources and data stay in your subscription and the region you choose; Communication Services keeps its data in the data location you choose (Europe by default).
 - User data is read from and written to your own identity provider tenant through Microsoft Graph; the app keeps no user database. Profile photos are stored in your Storage account.
-- Client secrets are stored in Key Vault and read by the app's managed identity; the registry token is used once to copy the image and is not stored; the Storage account has shared keys and public blob access turned off.
+- Client secrets and the registry token are stored in Key Vault and read by the app's managed identity; the Storage account has shared keys and public blob access turned off.
 - Sign-in uses OpenID Connect; tokens stay on the server and the browser holds only an encrypted, HTTP-only session cookie.
 - Ingress is public HTTPS only. Verification codes are sent to users by e-mail and SMS through Communication Services.
-- Nothing is sent to LinkCode. Outside your subscription the app talks only to your identity provider tenant, Google (when linking is on) and, during the deployment only, the LinkCode registry (image copy).
+- Nothing is sent to LinkCode. Outside your subscription the app talks only to your identity provider tenant, Google (when linking is on) and the LinkCode registry (image pull).
 
 ## Deployment parameters (version 0.6.0)
 
@@ -188,6 +184,7 @@ Deployment outputs (Azure portal > resource group > Deployments):
 | Version | Deploy | Files | Release notes |
 |---|---|---|---|
 | 0.6.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.6.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.6.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.6.0/azuredeploy.json), [createUiDefinition.json](0.6.0/createUiDefinition.json) |  |
+| 0.5.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.5.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.5.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.5.0/azuredeploy.json), [createUiDefinition.json](0.5.0/createUiDefinition.json) |  |
 | 0.4.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.4.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.4.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.4.0/azuredeploy.json), [createUiDefinition.json](0.4.0/createUiDefinition.json) |  |
 | 0.3.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.3.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.3.0/azuredeploy.json), [createUiDefinition.json](0.3.0/createUiDefinition.json) |  |
 | 0.2.0 | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Flinkcode-labs%2Fdeploy-offer-to-azure%2Fmain%2Fapps%2Fcis-global-profile-page%2F0.2.0%2FcreateUiDefinition.json) | [azuredeploy.json](0.2.0/azuredeploy.json), [createUiDefinition.json](0.2.0/createUiDefinition.json) |  |
