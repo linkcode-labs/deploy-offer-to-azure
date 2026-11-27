@@ -8,6 +8,7 @@ flowchart LR
       app["Global Profile Page<br/>container app<br/>(web app + API)"]
     end
     id["Managed identity"]
+    cr[("Container registry<br/>app image")]
     kv[("Key Vault<br/>secrets")]
     st[("Storage account<br/>profile photos, cookie keys")]
     redis[("Azure Managed Redis<br/>optional")]
@@ -28,4 +29,5 @@ flowchart LR
   app -->|OpenID Connect sign-in, Microsoft Graph| idp
   app -.OAuth.-> google
   env -->|logs| logs
-  acr -->|image pull with token| app
+  acr -->|image copy once at deployment, short-lived token| cr
+  cr -->|image pull via identity| app
